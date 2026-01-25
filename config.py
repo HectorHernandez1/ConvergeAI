@@ -12,15 +12,15 @@ class Settings(BaseModel):
 
     # All other settings - hardcoded defaults, edit this file to change
     # OpenAI models available:
-    # gpt-5.2 ($0.00175/input MTok, $0.014/output MTok),
-    # gpt-5.1 ($0.00125/input MTok, $0.01/output MTok),
-    # gpt-4.1-nano ($0.0001/input MTok, $0.0004/output MTok)
+    # gpt-5.2 ($0.00175/input 1k Tok, $0.014/output 1k Tok),
+    # gpt-5.1 ($0.00125/input 1k Tok, $0.01/output 1k Tok),
+    # gpt-4.1-nano ($0.0001/input 1k Tok, $0.0004/output 1k Tok)
     openai_model: str = "gpt-5.2"
 
     # Anthropic models available:
-    # claude-sonnet-4-5 ($0.003/input MTok, $0.015/output MTok),
-    # claude-haiku-4-5 ($0.001/input MTok, $0.005/output MTok),
-    # claude-opus-4-5 ($0.005/input MTok, $0.025/output MTok)
+    # claude-sonnet-4-5 ($0.003/input 1k Tok, $0.015/output 1k Tok),
+    # claude-haiku-4-5 ($0.001/input 1k Tok, $0.005/output 1k Tok),
+    # claude-opus-4-5 ($0.005/input 1k Tok, $0.025/output 1k Tok)
     anthropic_model: str = "claude-sonnet-4-5"
 
     # Max tokens for model responses
