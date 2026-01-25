@@ -86,7 +86,7 @@ Three matching strategies applied in order:
 
 Disagreement summaries are structured as: "Question N: 'text' - GPT says 'X', Claude says 'Y'"
 
-### PDF/PPT Extraction Chain (utils/pdf_reader.py)
+### File Extraction Chain (utils/file_reader.py)
 **PDF Fallback Waterfall:**
 1. PyPDF2 (fastest, basic extraction)
 2. pdfplumber (better table/layout handling)
@@ -97,6 +97,12 @@ Disagreement summaries are structured as: "Question N: 'text' - GPT says 'X', Cl
 - Handles table data via `shape.has_table` property
 - Efficient file type routing based on extension
 - Warns for .ppt files (limited support; recommends .pptx conversion)
+
+**HTML Extraction:**
+- Extracts text from HTML files using BeautifulSoup
+- Removes script and style elements automatically
+- Preserves table data and structured content
+- Handles both .html and .htm extensions
 
 ### Response Caching
 - Cache key: SHA256 hash of (model_name + prompt) using surrogatepass encoding for Unicode
@@ -154,7 +160,7 @@ Two formats generated in `output/`:
 Tests use `pytest-asyncio` for async solver methods. Key test files:
 - `tests/test_solvers.py`: Solver implementations and API interactions
 - `tests/test_comparator.py`: Answer matching logic (exact, numerical, semantic)
-- `tests/test_pdf_reader.py`: PDF extraction fallback chain
+- `tests/test_file_reader.py`: File extraction fallback chain (PDF/PPT/HTML)
 
 ## Important Implementation Notes
 
@@ -201,7 +207,7 @@ Variables are injected via `.format()` (not f-strings) to allow file-based templ
 - **JSON parsing**: Multi-stage fallback (raw JSON → markdown fence extraction → brace-matching → error with preview)
 - **List data handling**: Automatically wraps list responses in `{"answers": [...]}` structure
 - **Unicode encoding**: Surrogatepass encoding handles mathematical symbols and special characters from PDFs
-- **PDF/PPT extraction**: Silent fallback through extraction chain with file type routing
+- **File extraction (PDF/PPT/HTML)**: Silent fallback through extraction chain with file type routing
 - **Model API compatibility**: Automatic parameter selection for GPT-5.x vs GPT-4.x models
 - **Token limits**: Configurable max_tokens (default 8000) to handle lengthy responses with references
 - **Cost overruns**: Graceful early exit with partial results

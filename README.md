@@ -9,6 +9,7 @@ AI consensus problem solver using OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5
 - **Early Stop Optimization**: Stops at 90% agreement by default for cost efficiency
 - **PDF Extraction**: Automatic fallback chain (PyPDF2 → pdfplumber → pymupdf)
 - **PPT Support**: Extracts text from PPT/PPTX files including tables using python-pptx
+- **HTML Support**: Extracts text from HTML files, removing scripts and styles
 - **Optional Caching**: Reduces API costs for repeat queries (disabled by default in production)
 - **Cache Management**: CLI flags for clearing cache or disabling per-run
 - **Token & Cost Tracking**: Real-time monitoring of API usage and costs
@@ -49,6 +50,9 @@ python main.py --problem input/quiz.pdf
 
 # PPT/PPTX file (also supported)
 python main.py --problem input/lecture.pptx
+
+# HTML file (also supported)
+python main.py --problem input/webpage.html
 ```
 
 ### Supported File Types
@@ -56,11 +60,12 @@ python main.py --problem input/lecture.pptx
 ConvergeAI supports the following document types:
 - **PDF files** (.pdf): Uses automatic fallback extraction chain
 - **PowerPoint files** (.ppt, .pptx): Extracts text from slides and tables
-- **Reference materials**: Optional - place PDF/PPT files in `references/` folder
+- **HTML files** (.html, .htm): Extracts text, removes scripts and styles
+- **Reference materials**: Optional - place PDF/PPT/HTML files in `references/` folder
 
 ### With Reference Materials (Optional)
 
-ConvergeAI automatically detects and uses all PDFs or PPT files in the `references/` folder:
+ConvergeAI automatically detects and uses all PDFs, PPTs, or HTML files in the `references/` folder:
 
 ```bash
 python main.py --problem input/quiz.pdf
@@ -173,11 +178,11 @@ ConvergeAI/
 │   ├── base_solver.py         # Abstract base class
 │   ├── openai_solver.py       # GPT-5 implementation
 │   └── anthropic_solver.py    # Claude implementation
-├── utils/
-│   ├── pdf_reader.py          # PDF extraction with fallback chain
-│   ├── comparator.py          # Answer comparison logic
-│   ├── cache.py               # Response caching
-│   └── token_counter.py       # Token usage tracking
+ ├── utils/
+ │   ├── file_reader.py         # File extraction with fallback chain (PDF/PPT/HTML)
+ │   ├── comparator.py          # Answer comparison logic
+ │   ├── cache.py               # Response caching
+ │   └── token_counter.py       # Token usage tracking
  ├── prompts/
  │   ├── initial_solve.txt      # First iteration prompt
  │   └── refinement.txt         # Subsequent iteration prompt
@@ -205,7 +210,7 @@ pytest --cov=. --cov-report=html
 
 ## Error Handling
 
-- **PDF/PPT extraction failures**: Clear error message with fallback chain (PyPDF2 → pdfplumber → pymupdf)
+- **File extraction failures**: Clear error message with fallback chain (PDF/PPT/HTML)
 - **Unicode encoding**: Handles mathematical symbols and special characters with surrogatepass encoding
 - **API rate limits**: Exponential backoff with retries (max 3)
 - **Invalid JSON**: Extracts from markdown fences, handles list data, shows preview on failure
