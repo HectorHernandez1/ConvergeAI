@@ -62,9 +62,9 @@ class OpenAISolver(BaseSolver):
     
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         pricing = {
-            "gpt-4o": {"input": 0.0025, "output": 0.01},
-            "gpt-4-turbo": {"input": 0.01, "output": 0.03},
-            "gpt-4": {"input": 0.03, "output": 0.06},
+            "gpt-5.2": {"input": 0.00175, "output": 0.014},
+            "gpt-5.1": {"input": 0.00125, "output": 0.01},
+            "gpt-4.1-nano": {"input": 0.0001, "output": 0.0004},
         }
         rates = pricing.get(self.model, {"input": 0.0025, "output": 0.01})
         return (input_tokens / 1000 * rates["input"]) + (output_tokens / 1000 * rates["output"])
