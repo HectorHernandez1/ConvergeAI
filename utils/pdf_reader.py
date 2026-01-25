@@ -1,11 +1,31 @@
 import hashlib
-from typing import Optional
+import warnings
+from pathlib import Path
+from typing import Optional, Tuple
 import PyPDF2
 import pdfplumber
 import pymupdf as fitz
+from pptx import Presentation
 from config import settings
 
-def extract_text(pdf_path: str) -> str:
+def extract_text(file_path: str) -> str:
+    """Extract text from PDF or PPT/PPTX file."""
+    path = Path(file_path)
+    suffix = path.suffix.lower()
+    
+    text = _try_pdf_extraction(file_path)
+    if text and len(text.strip()) >= 100:
+        return text
+    
+    text = _try_ppt_extraction(file_path)
+    if text and len(text.strip()) >= 100:
+        return text
+    
+    raise ValueError(f"Failed to extract meaningful text from {file_path}. "
+                     "Ensure the file is not a scanned image-only document or corrupted.")
+
+def _try_pdf_extraction(pdf_path: str) -> Optional[str]:
+    """Try to extract text from PDF using fallback chain."""
     text = _try_pypdf2(pdf_path)
     
     if text and len(text.strip()) >= 100:
@@ -21,8 +41,44 @@ def extract_text(pdf_path: str) -> str:
     if text and len(text.strip()) >= 100:
         return text
     
-    raise ValueError(f"Failed to extract meaningful text from {pdf_path}. " 
-                     "Ensure the PDF is not a scanned image-only document.")
+    return None
+
+def _try_ppt_extraction(ppt_path: str) -> Optional[str]:
+    """Try to extract text from PPT/PPTX file."""
+    path = Path(ppt_path)
+    suffix = path.suffix.lower()
+    
+    if suffix not in ['.ppt', '.pptx']:
+        return None
+    
+    try:
+        text_parts = []
+        
+        if suffix == '.pptx':
+            prs = Presentation(ppt_path)
+            
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text:
+                        text_parts.append(shape.text.strip())
+                
+                for table in slide.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            if cell.text:
+                                text_parts.append(cell.text.strip())
+            
+            return "\n".join(filter(None, text_parts)) if text_parts else None
+            
+        elif suffix == '.ppt':
+            warnings.warn(f"PPT format (not PPTX) has limited text extraction support: {ppt_path}")
+            return f"PPT file: {path.name} (Note: PPT format has limited text extraction - consider converting to PPTX)"
+        
+        return None
+    except ImportError:
+        return None
+    except Exception:
+        return None
 
 def _try_pypdf2(pdf_path: str) -> Optional[str]:
     try:

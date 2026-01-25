@@ -13,6 +13,7 @@ from models import FinalOutput, IterationLog
 from config import settings
 from utils.pdf_reader import extract_text
 from utils.comparator import compare_answers, get_disagreement_summary
+from pathlib import Path
 from solvers.openai_solver import OpenAISolver
 from solvers.anthropic_solver import AnthropicSolver
 
@@ -20,25 +21,26 @@ console = Console()
 
 def extract_references() -> Optional[str]:
     """Automatically detect and extract text from references/ folder."""
-    reference_dir = Path(settings.reference_dir)
+    reference_dir = Path("references")
     
     if not reference_dir.exists():
         return None
     
-    pdf_files = list(reference_dir.glob("*.pdf"))
+    all_files = list(reference_dir.glob("*"))
+    doc_files = [f for f in all_files if f.suffix.lower() in ['.pdf', '.ppt', '.pptx']]
     
-    if not pdf_files:
+    if not doc_files:
         return None
     
-    console.print(f"[dim]Found {len(pdf_files)} reference PDF(s) in references/[/dim]")
+    console.print(f"[dim]Found {len(doc_files)} reference document(s) in references/[/dim]")
     
     combined_texts = []
-    for pdf_file in sorted(pdf_files):
+    for doc_file in sorted(doc_files):
         try:
-            text = extract_text(str(pdf_file))
-            combined_texts.append(f"# Reference: {pdf_file.name}\n\n{text}")
+            text = extract_text(str(doc_file))
+            combined_texts.append(f"# Reference: {doc_file.name}\n\n{text}")
         except Exception as e:
-            console.print(f"[yellow]Warning: Failed to extract {pdf_file.name}: {e}[/yellow]")
+            console.print(f"[yellow]Warning: Failed to extract {doc_file.name}: {e}[/yellow]")
     
     if combined_texts:
         return "\n\n".join(combined_texts)
@@ -68,7 +70,7 @@ async def run_consensus(problem_path: str,
     
     console.print(f"[bold blue]Processing problem:[/bold blue] {problem_path}")
     problem_text = extract_text(problem_path)
-    references_text = extract_references()
+    references_text = extract_references()  # Extracts from references/ folder (PDFs and PPTs)
     
     openai_solver = OpenAISolver()
     anthropic_solver = AnthropicSolver()

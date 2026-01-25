@@ -7,6 +7,7 @@ AI consensus problem solver using OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5
 - **Dual Model Approach**: Leverages both OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5 for robust solutions
 - **Iterative Consensus**: Models compare and refine answers (up to 5 iterations) until agreement
 - **PDF Extraction**: Automatic fallback chain (PyPDF2 → pdfplumber → pymupdf)
+- **PPT Support**: Extracts text from PPT/PPTX files using python-pptx
 - **Response Caching**: Reduces API costs for repeat queries
 - **Token & Cost Tracking**: Real-time monitoring of API usage and costs
 - **Rich CLI Output**: Beautiful terminal interface with progress tracking
@@ -41,12 +42,23 @@ ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
 ### Basic Usage
 
 ```bash
+# PDF file
 python main.py --problem input/quiz.pdf
+
+# PPT/PPTX file (also supported)
+python main.py --problem input/lecture.pptx
 ```
+
+### Supported File Types
+
+ConvergeAI supports the following document types:
+- **PDF files** (.pdf): Uses automatic fallback extraction chain
+- **PowerPoint files** (.ppt, .pptx): Extracts text from slides and tables
+- **Reference materials**: Optional - place PDF/PPT files in `references/` folder
 
 ### With Reference Materials (Optional)
 
-ConvergeAI automatically detects and uses all PDFs in the `references/` folder:
+ConvergeAI automatically detects and uses all PDFs or PPT files in the `references/` folder:
 
 ```bash
 python main.py --problem input/quiz.pdf
@@ -120,8 +132,8 @@ ConvergeAI/
  ├── prompts/
  │   ├── initial_solve.txt      # First iteration prompt
  │   └── refinement.txt         # Subsequent iteration prompt
- ├── input/                     # Place problem PDFs here
- ├── references/                 # Place reference material PDFs here (optional)
+ ├── input/                     # Place problem PDFs here (NOT reference materials)
+ ├── references/                 # Place reference materials PDFs/PPTs here (optional, auto-detected)
  ├── output/                    # Results saved here
  ├── logs/                      # Iteration logs and cache
 ├── tests/                     # Unit tests
