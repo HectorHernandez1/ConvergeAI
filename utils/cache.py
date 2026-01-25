@@ -10,8 +10,13 @@ CACHE_DIR = os.path.join(settings.log_dir, "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 def get_cache_key(model_name: str, prompt: str) -> str:
+    """Generate a cache key from model name and prompt.
+
+    Uses 'surrogatepass' encoding to handle special characters (e.g., mathematical
+    symbols like \ud835) that may appear in PDF/PPT extracted text.
+    """
     key_string = f"{model_name}:{prompt}"
-    return hashlib.sha256(key_string.encode()).hexdigest()
+    return hashlib.sha256(key_string.encode('utf-8', errors='surrogatepass')).hexdigest()
 
 def get_cached_response(cache_key: str) -> Optional[str]:
     cache_file = os.path.join(CACHE_DIR, f"{cache_key}.json")
