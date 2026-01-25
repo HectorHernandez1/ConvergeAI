@@ -6,7 +6,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from models import SolverResponse, Answer
 from config import settings
 from utils.cache import get_cache_key, get_cached_response, cache_response
-from base_solver import BaseSolver
+from .base_solver import BaseSolver
 from utils.token_counter import count_openai_tokens
 
 class OpenAISolver(BaseSolver):

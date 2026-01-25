@@ -206,22 +206,37 @@ def print_summary(output: FinalOutput):
 
 def main():
     parser = argparse.ArgumentParser(description="ConvergeAI - AI consensus problem solver")
-    parser.add_argument("--problem", required=True, help="Path to problem PDF")
+    parser.add_argument("--problem", help="Path to problem PDF (optional - will use first PDF in input/ directory)")
     parser.add_argument("--references", help="Path to reference PDF (optional)")
     parser.add_argument("--max-iterations", type=int, help="Maximum iterations")
     parser.add_argument("--verbose", action="store_true", help="Show detailed iteration output")
     
     args = parser.parse_args()
     
-    if not os.path.exists(args.problem):
-        console.print(f"[bold red]Error:[/bold red] Problem file not found: {args.problem}")
+    problem_path = args.problem
+    
+    if not problem_path:
+        input_dir = Path(settings.input_dir)
+        pdf_files = list(input_dir.glob("*.pdf"))
+        
+        if not pdf_files:
+            console.print(f"[bold red]Error:[/bold red] No PDF files found in {input_dir}")
+            console.print("Please add a PDF to the input/ directory or specify --problem")
+            return
+        
+        problem_path = str(pdf_files[0])
+        if len(pdf_files) > 1:
+            console.print(f"[yellow]Found {len(pdf_files)} PDF files. Using: {Path(problem_path).name}[/yellow]")
+    
+    if not os.path.exists(problem_path):
+        console.print(f"[bold red]Error:[/bold red] Problem file not found: {problem_path}")
         return
     
     console.print("[bold blue]ConvergeAI[/bold blue] - AI Consensus Problem Solver")
     
-    output = asyncio.run(run_consensus(args.problem, args.references, args.max_iterations))
+    output = asyncio.run(run_consensus(problem_path, args.references, args.max_iterations))
     
-    save_output(output, args.problem)
+    save_output(output, problem_path)
     print_summary(output)
 
 if __name__ == "__main__":
