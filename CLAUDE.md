@@ -184,8 +184,10 @@ The system includes an **early stop threshold** (default 90%) for production eff
 - Cost-sensitive applications where staleness is acceptable
 
 ### Token Counting
-- OpenAI: Uses `tiktoken` library via `utils/token_counter.py`
-- Anthropic: Approximation using `len(text) // 4` (close enough for cost estimation)
+- Both OpenAI and Anthropic: Uses actual token counts from API responses (`response.usage`)
+- OpenAI: `prompt_tokens` and `completion_tokens` from API response
+- Anthropic: `input_tokens` and `output_tokens` from API response
+- This ensures 100% accurate cost tracking without estimation
 
 ### Prompt Templates
 Two distinct prompts in `prompts/`:

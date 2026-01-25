@@ -23,8 +23,6 @@ class AnthropicSolver(BaseSolver):
             if cached:
                 return SolverResponse(**json.loads(cached))
         
-        input_tokens = self.count_tokens(prompt)
-        
         response = await self.client.messages.create(
             model=self.model,
             max_tokens=settings.max_tokens,
@@ -36,7 +34,8 @@ class AnthropicSolver(BaseSolver):
         )
         
         output_text = response.content[0].text
-        output_tokens = self.count_tokens(output_text)
+        input_tokens = response.usage.input_tokens
+        output_tokens = response.usage.output_tokens
         total_tokens = input_tokens + output_tokens
         cost = self.estimate_cost(input_tokens, output_tokens)
         

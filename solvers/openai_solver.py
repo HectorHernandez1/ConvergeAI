@@ -24,8 +24,6 @@ class OpenAISolver(BaseSolver):
             if cached:
                 return SolverResponse(**json.loads(cached))
         
-        input_tokens = self.count_tokens(prompt)
-
         # Determine which parameter to use for token limits
         # GPT-5.x models use max_completion_tokens
         # GPT-4.x models (including gpt-4.1-nano, gpt-4o, gpt-4-turbo) use max_tokens
@@ -50,7 +48,8 @@ class OpenAISolver(BaseSolver):
         response = await self.client.chat.completions.create(**request_params)
         
         output_text = response.choices[0].message.content
-        output_tokens = self.count_tokens(output_text)
+        input_tokens = response.usage.prompt_tokens
+        output_tokens = response.usage.completion_tokens
         total_tokens = input_tokens + output_tokens
         cost = self.estimate_cost(input_tokens, output_tokens)
         
