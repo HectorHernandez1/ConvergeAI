@@ -87,15 +87,25 @@ class AnthropicSolver(BaseSolver):
     def _parse_response(self, output: str) -> dict:
         try:
             data = json.loads(output.strip())
+            
+            if isinstance(data, list):
+                return {"answers": data}
+            
             if "answers" not in data:
                 raise ValueError("Missing 'answers' field")
             return data
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             if "```json" in output:
                 json_start = output.find("```json") + 7
                 json_end = output.find("```", json_start)
                 if json_end > json_start:
-                    data = json.loads(output[json_start:json_end].strip())
-                    if "answers" in data:
-                        return data
+                    extracted = output[json_start:json_end].strip()
+                    try:
+                        data = json.loads(extracted)
+                        if isinstance(data, list):
+                            return {"answers": data}
+                        if "answers" in data:
+                            return data
+                    except json.JSONDecodeError:
+                        pass
             raise ValueError("Invalid JSON response from model")

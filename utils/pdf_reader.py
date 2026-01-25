@@ -2,7 +2,7 @@ import hashlib
 from typing import Optional
 import PyPDF2
 import pdfplumber
-import fitz
+import pymupdf as fitz
 from config import settings
 
 def extract_text(pdf_path: str) -> str:

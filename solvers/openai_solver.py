@@ -88,6 +88,10 @@ class OpenAISolver(BaseSolver):
     def _parse_response(self, output: str) -> dict:
         try:
             data = json.loads(output.strip())
+            
+            if isinstance(data, list):
+                return {"answers": data}
+            
             if "answers" not in data:
                 raise ValueError("Missing 'answers' field")
             return data
@@ -97,6 +101,8 @@ class OpenAISolver(BaseSolver):
                 json_end = output.find("```", json_start)
                 if json_end > json_start:
                     data = json.loads(output[json_start:json_end].strip())
+                    if isinstance(data, list):
+                        return {"answers": data}
                     if "answers" in data:
                         return data
             raise ValueError("Invalid JSON response from model")
