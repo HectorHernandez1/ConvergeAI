@@ -43,9 +43,9 @@ class OpenAISolver(BaseSolver):
 
         # Add the appropriate token limit parameter based on model version
         if uses_new_api:
-            request_params["max_completion_tokens"] = 4000
+            request_params["max_completion_tokens"] = settings.max_tokens
         else:
-            request_params["max_tokens"] = 4000
+            request_params["max_tokens"] = settings.max_tokens
 
         response = await self.client.chat.completions.create(**request_params)
         

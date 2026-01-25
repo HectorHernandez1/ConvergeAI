@@ -27,7 +27,7 @@ class AnthropicSolver(BaseSolver):
         
         response = await self.client.messages.create(
             model=self.model,
-            max_tokens=4000,
+            max_tokens=settings.max_tokens,
             temperature=0.3 if iteration == 1 else 0.5,
             messages=[
                 {"role": "user", "content": prompt}

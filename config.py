@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     # claude-opus-4-5 ($0.005/input MTok, $0.025/output MTok)
     anthropic_model: str = "claude-haiku-4-5"
     
+    # Max tokens for model responses
+    max_tokens: int = 8000  
     max_iterations: int = 5
     agreement_threshold: float = 1.0
     early_stop_threshold: float = 0.90  # Stop at 90% agreement instead of 100%
@@ -26,7 +28,7 @@ class Settings(BaseSettings):
     output_dir: str = "output"
     log_dir: str = "logs"
     
-    enable_cache: bool = True
+    enable_cache: bool = False
     cache_ttl_hours: int = 24
     
     similarity_threshold: float = 0.85
