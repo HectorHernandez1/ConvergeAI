@@ -184,7 +184,10 @@ def _generate_markdown(output: FinalOutput, problem_name: str) -> str:
     ])
     
     for model_name in output.model_responses:
-        lines.append(f"### {model_name}")
+        model_total_cost = sum(r.cost_usd for r in output.model_responses[model_name])
+        model_total_tokens = sum(r.tokens_used for r in output.model_responses[model_name])
+        lines.append(f"### {model_name} (${model_total_cost:.4f} total, {model_total_tokens} total tokens)")
+        lines.append("")
         for response in output.model_responses[model_name]:
             lines.append(f"- Iteration {response.iteration}: {response.tokens_used} tokens, ${response.cost_usd:.4f}")
         lines.append("")
