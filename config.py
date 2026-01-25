@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     
     max_iterations: int = 5
     agreement_threshold: float = 1.0
+    early_stop_threshold: float = 0.90  # Stop at 90% agreement instead of 100%
     
     max_cost_usd: float = 5.0
     

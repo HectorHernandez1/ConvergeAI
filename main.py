@@ -18,10 +18,27 @@ from solvers.anthropic_solver import AnthropicSolver
 
 console = Console()
 
+def _check_cost_warning(current_cost: float, max_cost: float, iteration: int, is_final: bool = False):
+    """Display cost warnings before running an iteration."""
+    percentage = (current_cost / max_cost) * 100
+    
+    if percentage >= 90:
+        console.print(f"[bold red]⚠️  WARNING: Spent ${current_cost:.2f} ({percentage:.0f}%) of ${max_cost:.2f} budget![/bold red]")
+    elif percentage >= 75:
+        console.print(f"[bold yellow]⚠️  WARNING: Spent ${current_cost:.2f} ({percentage:.0f}%) of ${max_cost:.2f} budget[/bold yellow]")
+    elif percentage >= 50:
+        console.print(f"[bold yellow]ℹ️  INFO: Spent ${current_cost:.2f} ({percentage:.0f}%) of ${max_cost:.2f} budget[/bold yellow]")
+    elif not is_final and iteration > 1:
+        console.print(f"[dim]💰 Running iteration {iteration} | Total cost so far: ${current_cost:.4f}[/dim]")
+
 async def run_consensus(problem_path: str, 
                        references_path: Optional[str] = None,
-                       max_iterations: int = None) -> FinalOutput:
+                       max_iterations: int = None,
+                       early_stop_threshold: float = None,
+                       max_cost: float = None) -> FinalOutput:
     max_iterations = max_iterations or settings.max_iterations
+    early_stop = early_stop_threshold if early_stop_threshold is not None else settings.early_stop_threshold
+    cost_limit = max_cost if max_cost is not None else settings.max_cost_usd
     
     console.print(f"[bold blue]Processing problem:[/bold blue] {problem_path}")
     problem_text = extract_text(problem_path)
@@ -37,6 +54,8 @@ async def run_consensus(problem_path: str,
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
         for iteration in range(1, max_iterations + 1):
             task = progress.add_task(f"[cyan]Iteration {iteration}/{max_iterations}...", total=None)
+            
+            _check_cost_warning(total_cost, cost_limit, iteration)
             
             if iteration == 1:
                 response_a, response_b = await asyncio.gather(
@@ -69,8 +88,8 @@ async def run_consensus(problem_path: str,
             
             total_cost += response_a.cost_usd + response_b.cost_usd
             
-            if total_cost > settings.max_cost_usd:
-                console.print(f"[bold yellow]Cost limit (${settings.max_cost_usd}) exceeded. Stopping early.[/bold yellow]")
+            if total_cost > cost_limit:
+                console.print(f"[bold red]💰 Cost limit (${cost_limit:.2f}) exceeded! Stopping early.[/bold red]")
                 break
             
             comparison = compare_answers(response_a, response_b)
@@ -82,11 +101,19 @@ async def run_consensus(problem_path: str,
             )
             iteration_logs.append(iteration_log)
             
-            progress.update(task, description=f"[cyan]Iteration {iteration}/{max_iterations} complete - {comparison.agreement_percentage:.1f}% agreement[/cyan]")
+            total_questions = len(comparison.matching_questions) + len(comparison.differing_questions)
+            progress.update(task, description=f"[cyan]Iteration {iteration}/{max_iterations}: {comparison.agreement_percentage:.1f}% agreement | {len(comparison.matching_questions)}/{total_questions} questions in consensus[/cyan]")
             
             if comparison.agreement_percentage >= (settings.agreement_threshold * 100):
-                console.print(f"[bold green]100% agreement reached at iteration {iteration}![/bold green]")
+                console.print(f"[bold green]✓ 100% agreement reached at iteration {iteration}![/bold green]")
                 break
+            
+            if comparison.agreement_percentage >= (early_stop * 100):
+                console.print(f"[bold green]✓ {early_stop*100:.0f}% agreement threshold reached at iteration {iteration}![/bold green]")
+                break
+            
+            if iteration >= max_iterations:
+                console.print(f"[bold yellow]⚠️  Reached max iterations ({max_iterations}) with {comparison.agreement_percentage:.1f}% agreement[/bold yellow]")
     
     final_comparison = iteration_logs[-1].comparison
     consensus_answers = _determine_consensus(model_responses, final_comparison)
@@ -212,6 +239,8 @@ def main():
     parser.add_argument("--problem", help="Path to problem PDF (optional - will use first PDF in input/ directory)")
     parser.add_argument("--references", help="Path to reference PDF (optional)")
     parser.add_argument("--max-iterations", type=int, help="Maximum iterations")
+    parser.add_argument("--early-stop-threshold", type=float, help="Early stop threshold (0.0-1.0, default: 0.90)")
+    parser.add_argument("--max-cost", type=float, help="Maximum cost in USD (default: 5.0)")
     parser.add_argument("--verbose", action="store_true", help="Show detailed iteration output")
     
     args = parser.parse_args()
@@ -237,7 +266,8 @@ def main():
     
     console.print("[bold blue]ConvergeAI[/bold blue] - AI Consensus Problem Solver")
     
-    output = asyncio.run(run_consensus(problem_path, args.references, args.max_iterations))
+    output = asyncio.run(run_consensus(problem_path, args.references, args.max_iterations, 
+                                         args.early_stop_threshold, args.max_cost))
     
     save_output(output, problem_path)
     print_summary(output)
