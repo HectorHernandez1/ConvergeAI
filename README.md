@@ -4,11 +4,13 @@ AI consensus problem solver using OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5
 
 ## Features
 
-- **Dual Model Approach**: Leverages both OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5 for robust solutions
+- **Dual Model Approach**: Leverages both OpenAI GPT and Anthropic Claude for robust solutions
 - **Iterative Consensus**: Models compare and refine answers (up to 5 iterations) until agreement
+- **Early Stop Optimization**: Stops at 90% agreement by default for cost efficiency
 - **PDF Extraction**: Automatic fallback chain (PyPDF2 → pdfplumber → pymupdf)
-- **PPT Support**: Extracts text from PPT/PPTX files using python-pptx
-- **Response Caching**: Reduces API costs for repeat queries
+- **PPT Support**: Extracts text from PPT/PPTX files including tables using python-pptx
+- **Optional Caching**: Reduces API costs for repeat queries (disabled by default in production)
+- **Cache Management**: CLI flags for clearing cache or disabling per-run
 - **Token & Cost Tracking**: Real-time monitoring of API usage and costs
 - **Rich CLI Output**: Beautiful terminal interface with progress tracking
 - **JSON + Markdown Export**: Results saved in both formats
@@ -82,16 +84,63 @@ python main.py --problem input/quiz.py \
 python main.py --problem input/quiz.pdf --verbose
 ```
 
+### Cache Management
+
+```bash
+# Clear cache before running
+python main.py --problem input/quiz.pdf --clear-cache
+
+# Disable cache for this run
+python main.py --problem input/quiz.pdf --no-cache
+```
+
 ## Configuration
 
-Edit `.env` file to configure:
+### About config.py
+
+The [config.py](config.py) file uses Pydantic Settings to manage all configuration with sensible production defaults.
+
+**Key features:**
+- Type-safe configuration with Pydantic validation
+- Production-ready defaults (balanced models, caching disabled)
+- Edit [config.py](config.py) directly to customize settings
+
+### API Keys (.env file)
+
+The `.env` file is **only for API keys**. Edit `.env` to add your credentials:
+
+```env
+OPENAI_API_KEY=sk-your-openai-api-key
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
+```
+
+### Application Settings (config.py)
+
+To change application settings, edit [config.py](config.py) directly. Available settings and their defaults:
 
 - `OPENAI_MODEL`: Default `gpt-5.2` (also available: `gpt-5.1`, `gpt-4.1-nano`)
+  - gpt-5.2: $0.00175/1K input, $0.014/1K output (most capable)
+  - gpt-5.1: $0.00125/1K input, $0.01/1K output
+  - gpt-4.1-nano: $0.0001/1K input, $0.0004/1K output (cost-effective)
 - `ANTHROPIC_MODEL`: Default `claude-sonnet-4-5` (also available: `claude-haiku-4-5`, `claude-opus-4-5`)
+  - claude-sonnet-4-5: $0.003/1K input, $0.015/1K output (balanced default)
+  - claude-haiku-4-5: $0.001/1K input, $0.005/1K output (cost-effective)
+  - claude-opus-4-5: $0.005/1K input, $0.025/1K output (most capable)
+- `MAX_TOKENS`: Default `8000` (max response tokens for all models)
 - `MAX_ITERATIONS`: Default `5`
+- `EARLY_STOP_THRESHOLD`: Default `0.90` (90% - stops iteration early for efficiency)
 - `MAX_COST_USD`: Default `5.0`
 - `AGREEMENT_THRESHOLD`: Default `1.0` (100%)
-- `ENABLE_CACHE`: Default `true`
+- `ENABLE_CACHE`: Default `false` (disabled for production; edit config.py to enable for development)
+- `SIMILARITY_THRESHOLD`: Default `0.85` (semantic matching threshold)
+- `NUMERICAL_TOLERANCE`: Default `0.01` (1% tolerance for numeric answers)
+
+**To customize settings:** Edit the values directly in [config.py](config.py). For example, to use cost-effective models for testing:
+```python
+openai_model: str = "gpt-4.1-nano"
+anthropic_model: str = "claude-haiku-4-5"
+enable_cache: bool = True
+```
 
 ## Output
 
@@ -156,9 +205,11 @@ pytest --cov=. --cov-report=html
 
 ## Error Handling
 
-- **PDF extraction failures**: Clear error message with suggestions
+- **PDF/PPT extraction failures**: Clear error message with fallback chain (PyPDF2 → pdfplumber → pymupdf)
+- **Unicode encoding**: Handles mathematical symbols and special characters with surrogatepass encoding
 - **API rate limits**: Exponential backoff with retries (max 3)
-- **Invalid JSON**: Retry with stricter prompt, then fail gracefully
+- **Invalid JSON**: Extracts from markdown fences, handles list data, shows preview on failure
+- **Model compatibility**: Smart API parameter detection (max_completion_tokens for GPT-5.x, max_tokens for GPT-4.x)
 - **Cost limit exceeded**: Stop iteration, return best result
 - **Network errors**: Retry with backoff, timeout after 60s
 

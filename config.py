@@ -8,13 +8,13 @@ class Settings(BaseSettings):
     # gpt-5.2 ($0.00175/input MTok, $0.014/output MTok), 
     # gpt-5.1 ($0.00125/input MTok, $0.01/output MTok), 
     # gpt-4.1-nano ($0.0001/input MTok, $0.0004/output MTok)
-    openai_model: str = "gpt-4.1-nano"
+    openai_model: str = "gpt-5.2"
     
     # Anthropic models available: 
     # claude-sonnet-4-5 ($0.003/input MTok, $0.015/output MTok), 
     # claude-haiku-4-5 ($0.001/input MTok, $0.005/output MTok), 
     # claude-opus-4-5 ($0.005/input MTok, $0.025/output MTok)
-    anthropic_model: str = "claude-haiku-4-5"
+    anthropic_model: str = "claude-sonnet-4-5"
     
     # Max tokens for model responses
     max_tokens: int = 8000  
