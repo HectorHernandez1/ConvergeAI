@@ -35,7 +35,7 @@ def extract_references() -> Optional[str]:
         return None
     
     all_files = list(reference_dir.glob("*"))
-    doc_files = [f for f in all_files if f.suffix.lower() in ['.pdf', '.ppt', '.pptx']]
+    doc_files = [f for f in all_files if f.suffix.lower() in ['.pdf', '.ppt', '.pptx', '.html', '.htm']]
     
     if not doc_files:
         return None
@@ -273,7 +273,7 @@ def print_summary(output: FinalOutput):
 
 def main():
     parser = argparse.ArgumentParser(description="ConvergeAI - AI consensus problem solver")
-    parser.add_argument("--problem", help="Path to problem PDF (optional - will use first PDF in input/ directory)")
+    parser.add_argument("--problem", help="Path to problem file (PDF/PPT/HTML) (optional - will use first file in input/ directory)")
     parser.add_argument("--max-iterations", type=int, help="Maximum iterations")
     parser.add_argument("--early-stop-threshold", type=float, help="Early stop threshold (0.0-1.0, default: 0.90)")
     parser.add_argument("--max-cost", type=float, help="Maximum cost in USD (default: 5.0)")
@@ -285,16 +285,17 @@ def main():
     
     if not problem_path:
         input_dir = Path(settings.input_dir)
-        pdf_files = list(input_dir.glob("*.pdf"))
+        supported_extensions = ['.pdf', '.ppt', '.pptx', '.html', '.htm']
+        doc_files = [f for f in input_dir.iterdir() if f.is_file() and f.suffix.lower() in supported_extensions]
         
-        if not pdf_files:
-            console.print(f"[bold red]Error:[/bold red] No PDF files found in {input_dir}")
-            console.print("Please add a PDF to input/ directory or specify --problem")
+        if not doc_files:
+            console.print(f"[bold red]Error:[/bold red] No supported files found in {input_dir}")
+            console.print("Please add a file to input/ directory or specify --problem")
             return
         
-        problem_path = str(pdf_files[0])
-        if len(pdf_files) > 1:
-            console.print(f"[yellow]Found {len(pdf_files)} PDF files. Using: {Path(problem_path).name}[/yellow]")
+        problem_path = str(doc_files[0])
+        if len(doc_files) > 1:
+            console.print(f"[yellow]Found {len(doc_files)} files. Using: {Path(problem_path).name}[/yellow]")
     
     if not os.path.exists(problem_path):
         console.print(f"[bold red]Error:[/bold red] Problem file not found: {problem_path}")

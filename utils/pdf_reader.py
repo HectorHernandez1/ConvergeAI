@@ -6,10 +6,11 @@ import PyPDF2
 import pdfplumber
 import pymupdf as fitz
 from pptx import Presentation
+from bs4 import BeautifulSoup
 from config import settings
 
 def extract_text(file_path: str) -> str:
-    """Extract text from PDF or PPT/PPTX file."""
+    """Extract text from PDF, PPT/PPTX, or HTML file."""
     path = Path(file_path)
     suffix = path.suffix.lower()
 
@@ -22,12 +23,19 @@ def extract_text(file_path: str) -> str:
         text = _try_ppt_extraction(file_path)
         if text and len(text.strip()) >= 100:
             return text
+    elif suffix in ['.html', '.htm']:
+        text = _try_html_extraction(file_path)
+        if text and len(text.strip()) >= 100:
+            return text
     else:
-        # Unknown file type - try both methods as fallback
+        # Unknown file type - try all methods as fallback
         text = _try_pdf_extraction(file_path)
         if text and len(text.strip()) >= 100:
             return text
         text = _try_ppt_extraction(file_path)
+        if text and len(text.strip()) >= 100:
+            return text
+        text = _try_html_extraction(file_path)
         if text and len(text.strip()) >= 100:
             return text
 
@@ -93,6 +101,27 @@ def _try_ppt_extraction(ppt_path: str) -> Optional[str]:
         return None
     except ImportError:
         return None
+    except Exception:
+        return None
+
+def _try_html_extraction(html_path: str) -> Optional[str]:
+    """Try to extract text from HTML file."""
+    try:
+        with open(html_path, 'r', encoding='utf-8') as f:
+            soup = BeautifulSoup(f.read(), 'html.parser')
+        
+        # Remove script and style elements
+        for script in soup(["script", "style"]):
+            script.decompose()
+        
+        # Get text and clean it up
+        text = soup.get_text()
+        
+        # Clean up whitespace
+        lines = [line.strip() for line in text.splitlines()]
+        text_parts = [line for line in lines if line]
+        
+        return "\n".join(text_parts) if text_parts else None
     except Exception:
         return None
 
