@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ConvergeAI is an AI consensus problem solver that uses OpenAI GPT-4 and Anthropic Claude in parallel to solve academic problems through iterative consensus-building. The system runs up to 5 iterations where both models independently solve a problem, compare their answers, and refine their responses based on disagreements until reaching consensus or hitting iteration/cost limits.
+ConvergeAI is an AI consensus problem solver that uses OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5 in parallel to solve academic problems through iterative consensus-building. The system runs up to 5 iterations where both models independently solve a problem, compare their answers, and refine their responses based on disagreements until reaching consensus or hitting iteration/cost limits.
 
 ## Key Commands
 
@@ -95,8 +95,10 @@ Fallback waterfall for robust extraction:
 ## Configuration (.env)
 
 Critical settings in `config.py` (loaded from `.env`):
-- `OPENAI_MODEL`: Default `gpt-4o`
- - `ANTHROPIC_MODEL`: Default `claude-sonnet-4-5`
+- `OPENAI_MODEL`: Default `gpt-5.2` (also available: `gpt-5.1`, `gpt-4.1-nano`)
+  - Pricing: gpt-5.2 ($0.00175/1K input, $0.014/1K output), gpt-5.1 ($0.00125/1K input, $0.01/1K output), gpt-4.1-nano ($0.0001/1K input, $0.0004/1K output)
+- `ANTHROPIC_MODEL`: Default `claude-sonnet-4-5` (also available: `claude-haiku-4-5`, `claude-opus-4-5`)
+  - Pricing: claude-sonnet-4-5 ($0.003/1K input, $0.015/1K output), claude-haiku-4-5 ($0.001/1K input, $0.005/1K output), claude-opus-4-5 ($0.005/1K input, $0.025/1K output)
 - `MAX_ITERATIONS`: Default `5`
 - `MAX_COST_USD`: Default `5.0` (hard stop to prevent runaway costs)
 - `AGREEMENT_THRESHOLD`: Default `1.0` (100% agreement required)

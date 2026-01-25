@@ -1,10 +1,10 @@
 # ConvergeAI
 
-AI consensus problem solver using OpenAI GPT-4 and Anthropic Claude to solve academic problems through iterative consensus-building.
+AI consensus problem solver using OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5 to solve academic problems through iterative consensus-building.
 
 ## Features
 
-- **Dual Model Approach**: Leverages both OpenAI GPT-4 and Anthropic Claude for robust solutions
+- **Dual Model Approach**: Leverages both OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5 for robust solutions
 - **Iterative Consensus**: Models compare and refine answers (up to 5 iterations) until agreement
 - **PDF Extraction**: Automatic fallback chain (PyPDF2 → pdfplumber → pymupdf)
 - **Response Caching**: Reduces API costs for repeat queries
@@ -68,8 +68,8 @@ python main.py --problem input/quiz.pdf --verbose
 
 Edit `.env` file to configure:
 
-- `OPENAI_MODEL`: Default `gpt-4o`
- - `ANTHROPIC_MODEL`: Default `claude-sonnet-4-5`
+- `OPENAI_MODEL`: Default `gpt-5.2` (also available: `gpt-5.1`, `gpt-4.1-nano`)
+- `ANTHROPIC_MODEL`: Default `claude-sonnet-4-5` (also available: `claude-haiku-4-5`, `claude-opus-4-5`)
 - `MAX_ITERATIONS`: Default `5`
 - `MAX_COST_USD`: Default `5.0`
 - `AGREEMENT_THRESHOLD`: Default `1.0` (100%)
@@ -104,7 +104,7 @@ ConvergeAI/
 ├── models.py                  # Pydantic models for type safety
 ├── solvers/
 │   ├── base_solver.py         # Abstract base class
-│   ├── openai_solver.py       # GPT-4 implementation
+│   ├── openai_solver.py       # GPT-5 implementation
 │   └── anthropic_solver.py    # Claude implementation
 ├── utils/
 │   ├── pdf_reader.py          # PDF extraction with fallback chain
