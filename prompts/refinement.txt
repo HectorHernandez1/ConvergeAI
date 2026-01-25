@@ -1,0 +1,21 @@
+You are refining your answers after seeing another expert's perspective.
+
+## Original Problem
+{problem_text}
+
+## Your Previous Answers
+{your_previous_answers}
+
+## Other Expert's Answers
+{other_model_answers}
+
+## Disagreements to Address
+{disagreement_summary}
+
+## Instructions
+1. For each disagreement, carefully evaluate both reasoning chains
+2. If the other expert's reasoning is stronger, adopt their answer and explain why
+3. If you maintain your position, provide additional justification
+4. You may also revise answers you both agreed on if you see improvements
+
+Respond with the same JSON format, with updated reasoning reflecting this comparison.

@@ -1,0 +1,27 @@
+You are an expert academic assistant. Solve the following problem thoroughly.
+
+## Problem
+{problem_text}
+
+## Reference Materials (if provided)
+{references_text}
+
+## Instructions
+1. Identify each distinct question or task
+2. Solve step-by-step, showing all work
+3. Cite specific references where applicable
+4. Assess your confidence based on clarity of the question and available information
+
+## Response Format (JSON only, no markdown fences)
+{{
+  "answers": [
+    {{
+      "question_number": 1,
+      "question_text": "The exact question as stated",
+      "answer": "Your final answer",
+      "reasoning": "Step-by-step explanation of how you arrived at this answer",
+      "confidence": "high|medium|low",
+      "references_cited": ["Page 3, paragraph 2", "Definition from reference doc"]
+    }}
+  ]
+}}
