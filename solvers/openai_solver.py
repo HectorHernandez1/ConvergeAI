@@ -62,11 +62,11 @@ class OpenAISolver(BaseSolver):
     
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         pricing = {
-            "gpt-4o": {"input": 0.005, "output": 0.015},
+            "gpt-4o": {"input": 0.0025, "output": 0.01},
             "gpt-4-turbo": {"input": 0.01, "output": 0.03},
             "gpt-4": {"input": 0.03, "output": 0.06},
         }
-        rates = pricing.get(self.model, {"input": 0.005, "output": 0.015})
+        rates = pricing.get(self.model, {"input": 0.0025, "output": 0.01})
         return (input_tokens / 1000 * rates["input"]) + (output_tokens / 1000 * rates["output"])
     
     def _build_prompt(self, problem: str, references: str, previous_answers: dict, iteration: int) -> str:

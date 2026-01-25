@@ -61,9 +61,9 @@ class AnthropicSolver(BaseSolver):
     
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
         pricing = {
-            "claude-sonnet-4-20250514": {"input": 0.003, "output": 0.015},
-            "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},
-            "claude-3-opus-20240229": {"input": 0.015, "output": 0.075},
+            "claude-sonnet-4-5": {"input": 0.003, "output": 0.015},
+            "claude-haiku-4-5": {"input": 0.001, "output": 0.005},
+            "claude-opus-4-5": {"input": 0.005, "output": 0.025},
         }
         rates = pricing.get(self.model, {"input": 0.003, "output": 0.015})
         return (input_tokens / 1000 * rates["input"]) + (output_tokens / 1000 * rates["output"])

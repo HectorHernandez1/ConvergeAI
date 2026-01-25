@@ -40,7 +40,7 @@ async def test_anthropic_solver_solve():
     with patch.object(AnthropicSolver, '__init__', lambda self: None):
         solver = AnthropicSolver()
         solver.model_name = "Anthropic Claude"
-        solver.model = "claude-sonnet-4-20250514"
+        solver.model = "claude-sonnet-4-5"
         solver.client = AsyncMock()
         solver.client.messages.create = AsyncMock(return_value=mock_response)
         solver.count_tokens = lambda x: 50
@@ -64,7 +64,7 @@ def test_openai_estimate_cost():
 
 def test_anthropic_estimate_cost():
     solver = AnthropicSolver()
-    solver.model = "claude-sonnet-4-20250514"
+    solver.model = "claude-sonnet-4-5"
     
     cost = solver.estimate_cost(1000, 500)
     assert cost > 0

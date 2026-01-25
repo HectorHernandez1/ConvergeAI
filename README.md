@@ -69,7 +69,7 @@ python main.py --problem input/quiz.pdf --verbose
 Edit `.env` file to configure:
 
 - `OPENAI_MODEL`: Default `gpt-4o`
-- `ANTHROPIC_MODEL`: Default `claude-sonnet-4-20250514`
+ - `ANTHROPIC_MODEL`: Default `claude-sonnet-4-5`
 - `MAX_ITERATIONS`: Default `5`
 - `MAX_COST_USD`: Default `5.0`
 - `AGREEMENT_THRESHOLD`: Default `1.0` (100%)
