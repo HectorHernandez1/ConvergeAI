@@ -25,16 +25,29 @@ class OpenAISolver(BaseSolver):
                 return SolverResponse(**json.loads(cached))
         
         input_tokens = self.count_tokens(prompt)
-        
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
+
+        # Determine which parameter to use for token limits
+        # GPT-5.x models use max_completion_tokens
+        # GPT-4.x models (including gpt-4.1-nano, gpt-4o, gpt-4-turbo) use max_tokens
+        uses_new_api = "gpt-5" in self.model
+
+        # Build request parameters
+        request_params = {
+            "model": self.model,
+            "messages": [
                 {"role": "system", "content": "You are an expert academic assistant. Always respond with valid JSON only, no markdown fences."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.3 if iteration == 1 else 0.5,
-            max_tokens=4000
-        )
+            "temperature": 0.3 if iteration == 1 else 0.5,
+        }
+
+        # Add the appropriate token limit parameter based on model version
+        if uses_new_api:
+            request_params["max_completion_tokens"] = 4000
+        else:
+            request_params["max_tokens"] = 4000
+
+        response = await self.client.chat.completions.create(**request_params)
         
         output_text = response.choices[0].message.content
         output_tokens = self.count_tokens(output_text)
