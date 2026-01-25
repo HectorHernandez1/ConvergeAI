@@ -42,9 +42,11 @@ env/
 # Logs
 logs/*.log
 
+# Input
+input/
+
 # Output
-output/*.json
-output/*.md
+output/
 
 # OS
 .DS_Store
