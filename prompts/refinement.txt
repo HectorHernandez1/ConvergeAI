@@ -18,4 +18,17 @@ You are refining your answers after seeing another expert's perspective.
 3. If you maintain your position, provide additional justification
 4. You may also revise answers you both agreed on if you see improvements
 
-Respond with the same JSON format, with updated reasoning reflecting this comparison.
+## Response Format
+Respond with ALL answers in the same JSON format as your previous response, with updated reasoning reflecting this comparison:
+{{
+  "answers": [
+    {{
+      "question_number": 1,
+      "question_text": "The exact question as stated",
+      "answer": "Your final answer",
+      "reasoning": "Step-by-step explanation",
+      "confidence": "high|medium|low",
+      "references_cited": []
+    }}
+  ]
+}}

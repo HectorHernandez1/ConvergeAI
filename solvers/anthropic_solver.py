@@ -43,10 +43,11 @@ class AnthropicSolver(BaseSolver):
         cost = self.estimate_cost(input_tokens, output_tokens)
         
         response_data = self._parse_response(output_text)
+        normalized_answers = self._normalize_answers(response_data["answers"])
         solver_response = SolverResponse(
             model_name=self.model_name,
             iteration=iteration,
-            answers=response_data["answers"],
+            answers=normalized_answers,
             tokens_used=total_tokens,
             cost_usd=cost
         )
@@ -109,3 +110,18 @@ class AnthropicSolver(BaseSolver):
                     except json.JSONDecodeError:
                         pass
             raise ValueError("Invalid JSON response from model")
+    
+    def _normalize_answers(self, answers: list) -> list:
+        from models import Answer
+        normalized = []
+        for ans in answers:
+            if isinstance(ans, dict):
+                ans_dict = ans.copy()
+                if not isinstance(ans_dict.get("answer"), str):
+                    ans_dict["answer"] = json.dumps(ans_dict["answer"], ensure_ascii=False)
+                ans = Answer(**ans_dict)
+            elif isinstance(ans, Answer):
+                if not isinstance(ans.answer, str):
+                    ans.answer = json.dumps(ans.answer, ensure_ascii=False)
+            normalized.append(ans)
+        return normalized

@@ -102,8 +102,13 @@ def get_disagreement_summary(differing_questions: list) -> str:
     for diff in differing_questions:
         q_num = diff["question_number"]
         q_text = diff["question_text"]
-        answer_a = diff.get("answer_a", {}).get("answer", "N/A")
-        answer_b = diff.get("answer_b", {}).get("answer", "N/A")
+        
+        answer_a_obj = diff.get("answer_a")
+        answer_a = answer_a_obj.get("answer", "N/A") if answer_a_obj else "N/A"
+        
+        answer_b_obj = diff.get("answer_b")
+        answer_b = answer_b_obj.get("answer", "N/A") if answer_b_obj else "N/A"
+        
         summary_parts.append(f"Question {q_num}: '{q_text}' - GPT says '{answer_a}', Claude says '{answer_b}'")
     
     return "\n".join(summary_parts)
