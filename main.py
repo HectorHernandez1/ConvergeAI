@@ -11,7 +11,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from models import FinalOutput, IterationLog
 from config import settings
-from utils.pdf_reader import extract_text
+from utils.file_reader import extract_text
 from utils.comparator import compare_answers, get_disagreement_summary
 from pathlib import Path
 from solvers.openai_solver import OpenAISolver

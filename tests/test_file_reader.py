@@ -1,7 +1,7 @@
 import pytest
 import os
 import tempfile
-from utils.pdf_reader import extract_text, _try_pypdf2, _try_pdfplumber, _try_pymupdf, _try_html_extraction
+from utils.file_reader import extract_text, _try_pypdf2, _try_pdfplumber, _try_pymupdf, _try_html_extraction
 
 def test_extract_text_missing_file():
     with pytest.raises(ValueError):
