@@ -1,9 +1,7 @@
-import asyncio
 import json
-from typing import Optional
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
-from models import SolverResponse, Answer
+from models import SolverResponse
 from config import settings
 from utils.cache import get_cache_key, get_cached_response, cache_response
 from .base_solver import BaseSolver
@@ -107,18 +105,3 @@ class OpenAISolver(BaseSolver):
                     if "answers" in data:
                         return data
             raise ValueError("Invalid JSON response from model")
-    
-    def _normalize_answers(self, answers: list) -> list:
-        from models import Answer
-        normalized = []
-        for ans in answers:
-            if isinstance(ans, dict):
-                ans_dict = ans.copy()
-                if not isinstance(ans_dict.get("answer"), str):
-                    ans_dict["answer"] = json.dumps(ans_dict["answer"], ensure_ascii=False)
-                ans = Answer(**ans_dict)
-            elif isinstance(ans, Answer):
-                if not isinstance(ans.answer, str):
-                    ans.answer = json.dumps(ans.answer, ensure_ascii=False)
-            normalized.append(ans)
-        return normalized
