@@ -19,6 +19,14 @@ from solvers.anthropic_solver import AnthropicSolver
 
 console = Console()
 
+def sanitize_text(text: str) -> str:
+    """Remove or replace problematic Unicode characters that cause encoding errors."""
+    if not text:
+        return text
+    
+    text = text.encode('utf-8', errors='ignore').decode('utf-8')
+    return text
+
 def extract_references() -> Optional[str]:
     """Automatically detect and extract text from references/ folder."""
     reference_dir = Path("references")
@@ -38,6 +46,7 @@ def extract_references() -> Optional[str]:
     for doc_file in sorted(doc_files):
         try:
             text = extract_text(str(doc_file))
+            text = sanitize_text(text)
             combined_texts.append(f"# Reference: {doc_file.name}\n\n{text}")
         except Exception as e:
             console.print(f"[yellow]Warning: Failed to extract {doc_file.name}: {e}[/yellow]")
@@ -69,7 +78,7 @@ async def run_consensus(problem_path: str,
     cost_limit = max_cost if max_cost is not None else settings.max_cost_usd
     
     console.print(f"[bold blue]Processing problem:[/bold blue] {problem_path}")
-    problem_text = extract_text(problem_path)
+    problem_text = sanitize_text(extract_text(problem_path))
     references_text = extract_references()  # Extracts from references/ folder (PDFs and PPTs)
     
     openai_solver = OpenAISolver()
