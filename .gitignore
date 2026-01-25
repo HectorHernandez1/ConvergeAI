@@ -45,6 +45,9 @@ logs/*.log
 # Input
 input/
 
+# References
+references/
+
 # Output
 output/
 

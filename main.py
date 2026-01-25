@@ -18,6 +18,33 @@ from solvers.anthropic_solver import AnthropicSolver
 
 console = Console()
 
+def extract_references() -> Optional[str]:
+    """Automatically detect and extract text from references/ folder."""
+    reference_dir = Path(settings.reference_dir)
+    
+    if not reference_dir.exists():
+        return None
+    
+    pdf_files = list(reference_dir.glob("*.pdf"))
+    
+    if not pdf_files:
+        return None
+    
+    console.print(f"[dim]Found {len(pdf_files)} reference PDF(s) in references/[/dim]")
+    
+    combined_texts = []
+    for pdf_file in sorted(pdf_files):
+        try:
+            text = extract_text(str(pdf_file))
+            combined_texts.append(f"# Reference: {pdf_file.name}\n\n{text}")
+        except Exception as e:
+            console.print(f"[yellow]Warning: Failed to extract {pdf_file.name}: {e}[/yellow]")
+    
+    if combined_texts:
+        return "\n\n".join(combined_texts)
+    
+    return None
+
 def _check_cost_warning(current_cost: float, max_cost: float, iteration: int, is_final: bool = False):
     """Display cost warnings before running an iteration."""
     percentage = (current_cost / max_cost) * 100
@@ -32,7 +59,6 @@ def _check_cost_warning(current_cost: float, max_cost: float, iteration: int, is
         console.print(f"[dim]💰 Running iteration {iteration} | Total cost so far: ${current_cost:.4f}[/dim]")
 
 async def run_consensus(problem_path: str, 
-                       references_path: Optional[str] = None,
                        max_iterations: int = None,
                        early_stop_threshold: float = None,
                        max_cost: float = None) -> FinalOutput:
@@ -42,7 +68,7 @@ async def run_consensus(problem_path: str,
     
     console.print(f"[bold blue]Processing problem:[/bold blue] {problem_path}")
     problem_text = extract_text(problem_path)
-    references_text = extract_text(references_path) if references_path else None
+    references_text = extract_references()
     
     openai_solver = OpenAISolver()
     anthropic_solver = AnthropicSolver()
@@ -237,7 +263,6 @@ def print_summary(output: FinalOutput):
 def main():
     parser = argparse.ArgumentParser(description="ConvergeAI - AI consensus problem solver")
     parser.add_argument("--problem", help="Path to problem PDF (optional - will use first PDF in input/ directory)")
-    parser.add_argument("--references", help="Path to reference PDF (optional)")
     parser.add_argument("--max-iterations", type=int, help="Maximum iterations")
     parser.add_argument("--early-stop-threshold", type=float, help="Early stop threshold (0.0-1.0, default: 0.90)")
     parser.add_argument("--max-cost", type=float, help="Maximum cost in USD (default: 5.0)")
@@ -253,7 +278,7 @@ def main():
         
         if not pdf_files:
             console.print(f"[bold red]Error:[/bold red] No PDF files found in {input_dir}")
-            console.print("Please add a PDF to the input/ directory or specify --problem")
+            console.print("Please add a PDF to input/ directory or specify --problem")
             return
         
         problem_path = str(pdf_files[0])
@@ -266,8 +291,8 @@ def main():
     
     console.print("[bold blue]ConvergeAI[/bold blue] - AI Consensus Problem Solver")
     
-    output = asyncio.run(run_consensus(problem_path, args.references, args.max_iterations, 
-                                         args.early_stop_threshold, args.max_cost))
+    output = asyncio.run(run_consensus(problem_path, args.max_iterations, 
+                                          args.early_stop_threshold, args.max_cost))
     
     save_output(output, problem_path)
     print_summary(output)

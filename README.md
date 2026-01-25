@@ -44,11 +44,17 @@ ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
 python main.py --problem input/quiz.pdf
 ```
 
-### With Reference Materials
+### With Reference Materials (Optional)
+
+ConvergeAI automatically detects and uses all PDFs in the `references/` folder:
 
 ```bash
-python main.py --problem input/quiz.pdf --references input/textbook.pdf
+python main.py --problem input/quiz.pdf
 ```
+
+Add PDFs to the `references/` folder and ConvergeAI will automatically extract and combine them for the AI models.
+
+**Note:** Reference materials are optional. If no PDFs are found in `references/`, the system runs without references.
 
 ### Custom Settings
 
@@ -111,12 +117,13 @@ ConvergeAI/
 │   ├── comparator.py          # Answer comparison logic
 │   ├── cache.py               # Response caching
 │   └── token_counter.py       # Token usage tracking
-├── prompts/
-│   ├── initial_solve.txt      # First iteration prompt
-│   └── refinement.txt         # Subsequent iteration prompt
-├── input/                     # Place PDFs here
-├── output/                    # Results saved here
-├── logs/                      # Iteration logs and cache
+ ├── prompts/
+ │   ├── initial_solve.txt      # First iteration prompt
+ │   └── refinement.txt         # Subsequent iteration prompt
+ ├── input/                     # Place problem PDFs here
+ ├── references/                 # Place reference material PDFs here (optional)
+ ├── output/                    # Results saved here
+ ├── logs/                      # Iteration logs and cache
 ├── tests/                     # Unit tests
 ├── requirements.txt
 ├── .env.example
