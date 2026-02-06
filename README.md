@@ -178,18 +178,18 @@ ConvergeAI/
 │   ├── base_solver.py         # Abstract base class
 │   ├── openai_solver.py       # GPT-5 implementation
 │   └── anthropic_solver.py    # Claude implementation
- ├── utils/
- │   ├── file_reader.py         # File extraction with fallback chain (PDF/PPT/HTML)
- │   ├── comparator.py          # Answer comparison logic
- │   ├── cache.py               # Response caching
- │   └── token_counter.py       # Token usage tracking
- ├── prompts/
- │   ├── initial_solve.txt      # First iteration prompt
- │   └── refinement.txt         # Subsequent iteration prompt
- ├── input/                     # Place problem PDFs here (NOT reference materials)
- ├── references/                 # Place reference materials PDFs/PPTs here (optional, auto-detected)
- ├── output/                    # Results saved here
- ├── logs/                      # Iteration logs and cache
+├── utils/
+│   ├── file_reader.py         # File extraction with fallback chain (PDF/PPT/HTML)
+│   ├── comparator.py          # Answer comparison logic
+│   ├── cache.py               # Response caching
+│   └── token_counter.py       # Token usage tracking
+├── prompts/
+│   ├── initial_solve.txt      # First iteration prompt
+│   └── refinement.txt         # Subsequent iteration prompt
+├── input/                     # Place problem PDFs here (NOT reference materials)
+├── references/                 # Place reference materials PDFs/PPTs here (optional, auto-detected)
+├── output/                    # Results saved here
+├── logs/                      # Iteration logs and cache
 ├── tests/                     # Unit tests
 ├── requirements.txt
 ├── .env.example

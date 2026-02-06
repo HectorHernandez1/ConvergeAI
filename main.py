@@ -161,6 +161,7 @@ async def run_consensus(problem_path: str,
         final_agreement=final_comparison.agreement_percentage,
         consensus_answers=consensus_answers,
         model_responses=model_responses,
+        iteration_comparisons=[log.comparison for log in iteration_logs],
         total_cost_usd=total_cost
     )
 
@@ -241,12 +242,99 @@ def _generate_markdown(output: FinalOutput, problem_name: str) -> str:
             lines.append(f"**References Cited:** {', '.join(answer.references_cited)}")
         lines.append("")
     
+    # Disagreement Tracker section
+    comparisons = output.iteration_comparisons
+    if not comparisons and len(output.model_responses) == 2:
+        # Backward compatibility: recompute from model_responses
+        from utils.comparator import compare_answers
+        model_names = list(output.model_responses.keys())
+        for i in range(len(output.model_responses[model_names[0]])):
+            comp = compare_answers(
+                output.model_responses[model_names[0]][i],
+                output.model_responses[model_names[1]][i]
+            )
+            comparisons.append(comp)
+
+    if comparisons:
+        model_names = list(output.model_responses.keys())
+        num_questions = len(comparisons[0].matching_questions) + len(comparisons[0].differing_questions)
+
+        lines.extend(["---", "## Disagreement Tracker", ""])
+
+        # Agreement progression table
+        lines.append("### Agreement Progression")
+        lines.append("")
+        header = "| Iteration | Agreement |"
+        for q in range(1, num_questions + 1):
+            header += f" Q{q} |"
+        lines.append(header)
+        sep = "|-----------|-----------|"
+        for _ in range(num_questions):
+            sep += "----|"
+        lines.append(sep)
+
+        for idx, comp in enumerate(comparisons):
+            row = f"| {idx + 1} | {comp.agreement_percentage:.1f}% |"
+            all_questions = set(comp.matching_questions) | {d["question_number"] for d in comp.differing_questions}
+            for q in range(1, num_questions + 1):
+                if q in comp.matching_questions:
+                    row += " :white_check_mark: |"
+                elif q in all_questions:
+                    row += " :x: |"
+                else:
+                    row += " - |"
+            lines.append(row)
+        lines.append("")
+
+        # Detailed disagreements per iteration
+        lines.append("### Iteration Deltas")
+        lines.append("")
+
+        for idx, comp in enumerate(comparisons):
+            if not comp.differing_questions:
+                continue
+            lines.append(f"#### Iteration {idx + 1} — {comp.agreement_percentage:.1f}% agreement ({len(comp.differing_questions)} disagreement{'s' if len(comp.differing_questions) != 1 else ''})")
+            lines.append("")
+            for diff in comp.differing_questions:
+                q_num = diff["question_number"]
+                q_text = diff.get("question_text", "")
+                lines.append(f"**Question {q_num}:** {q_text}")
+                lines.append("")
+
+                answer_a = diff.get("answer_a")
+                answer_b = diff.get("answer_b")
+                a_text = answer_a.get("answer", "N/A") if answer_a else "N/A"
+                b_text = answer_b.get("answer", "N/A") if answer_b else "N/A"
+
+                lines.append(f"| Model | Answer |")
+                lines.append(f"|-------|--------|")
+                lines.append(f"| {model_names[0]} | {a_text} |")
+                lines.append(f"| {model_names[1]} | {b_text} |")
+                lines.append("")
+
+        # Unresolved disagreements summary
+        final_comp = comparisons[-1]
+        if final_comp.differing_questions:
+            lines.append("### Unresolved Disagreements")
+            lines.append("")
+            lines.append(f"The following {len(final_comp.differing_questions)} question(s) never reached agreement after {len(comparisons)} iteration(s):")
+            lines.append("")
+            for diff in final_comp.differing_questions:
+                q_num = diff["question_number"]
+                answer_a = diff.get("answer_a")
+                answer_b = diff.get("answer_b")
+                a_text = answer_a.get("answer", "N/A") if answer_a else "N/A"
+                b_text = answer_b.get("answer", "N/A") if answer_b else "N/A"
+                lines.append(f"- **Q{q_num}**: {model_names[0]} = \"{a_text}\" vs {model_names[1]} = \"{b_text}\"")
+            lines.append("")
+
+    # Iteration History section
     lines.extend([
         "---",
         "## Iteration History",
         ""
     ])
-    
+
     for model_name in output.model_responses:
         model_total_cost = sum(r.cost_usd for r in output.model_responses[model_name])
         model_total_tokens = sum(r.tokens_used for r in output.model_responses[model_name])
@@ -255,7 +343,7 @@ def _generate_markdown(output: FinalOutput, problem_name: str) -> str:
         for response in output.model_responses[model_name]:
             lines.append(f"- Iteration {response.iteration}: {response.tokens_used} tokens, ${response.cost_usd:.4f}")
         lines.append("")
-    
+
     return "\n".join(lines)
 
 def print_summary(output: FinalOutput):

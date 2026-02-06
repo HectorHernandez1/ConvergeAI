@@ -28,6 +28,7 @@ class FinalOutput(BaseModel):
     final_agreement: float
     consensus_answers: list[Answer]
     model_responses: dict[str, list[SolverResponse]]
+    iteration_comparisons: list[ComparisonResult] = Field(default_factory=list)
     total_cost_usd: float
 
 class IterationLog(BaseModel):

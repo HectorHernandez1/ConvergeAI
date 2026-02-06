@@ -1,8 +1,31 @@
 import re
+import unicodedata
 from difflib import SequenceMatcher
 from typing import Tuple, Optional
 from models import SolverResponse, ComparisonResult, Answer
 from config import settings
+
+# Map Unicode subscript/superscript characters to ASCII equivalents
+_UNICODE_TO_ASCII = str.maketrans({
+    '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4',
+    '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
+    '₊': '+', '₋': '-', '₌': '=', '₍': '(', '₎': ')',
+    'ₐ': 'a', 'ₑ': 'e', 'ₒ': 'o', 'ₓ': 'x', 'ₕ': 'h',
+    'ₖ': 'k', 'ₗ': 'l', 'ₘ': 'm', 'ₙ': 'n', 'ₚ': 'p',
+    'ₛ': 's', 'ₜ': 't',
+    '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4',
+    '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9',
+    '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')',
+    'ᵃ': 'a', 'ᵇ': 'b', 'ᵈ': 'd', 'ᵉ': 'e', 'ᶠ': 'f',
+    'ᵍ': 'g', 'ⁱ': 'i', 'ʲ': 'j', 'ᵏ': 'k', 'ˡ': 'l',
+    'ᵐ': 'm', 'ⁿ': 'n', 'ᵒ': 'o', 'ᵖ': 'p', 'ʳ': 'r',
+    'ˢ': 's', 'ᵗ': 't', 'ᵘ': 'u', 'ᵛ': 'v', 'ʷ': 'w',
+    'ˣ': 'x', 'ʸ': 'y', 'ᶻ': 'z',
+    'α': 'alpha', 'β': 'beta', 'γ': 'gamma', 'δ': 'delta',
+    'σ': 'sigma', 'μ': 'mu', 'η': 'eta', 'θ': 'theta',
+    'λ': 'lambda', 'π': 'pi', 'ρ': 'rho', 'τ': 'tau',
+    'φ': 'phi', 'ψ': 'psi', 'ω': 'omega',
+})
 
 def compare_answers(response_a: SolverResponse, 
                     response_b: SolverResponse) -> ComparisonResult:
@@ -72,6 +95,11 @@ def _check_match(answer_a: str, answer_b: str) -> Optional[str]:
     return None
 
 def _normalize_answer(answer: str) -> str:
+    # Decompose combining characters (e.g., p̂ → p + ^) then strip combining marks
+    answer = unicodedata.normalize('NFKD', answer)
+    answer = ''.join(c for c in answer if not unicodedata.combining(c))
+    # Map subscript/superscript/Greek characters to ASCII equivalents
+    answer = answer.translate(_UNICODE_TO_ASCII)
     answer = answer.strip().lower()
     answer = re.sub(r'\s+', ' ', answer)
     answer = re.sub(r'[^\w\s\-\+\=\(\)\.,]', '', answer)
