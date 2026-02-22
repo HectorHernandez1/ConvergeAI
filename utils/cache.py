@@ -13,7 +13,7 @@ def get_cache_key(model_name: str, prompt: str) -> str:
     """Generate a cache key from model name and prompt.
 
     Uses 'surrogatepass' encoding to handle special characters (e.g., mathematical
-    symbols like \ud835) that may appear in PDF/PPT extracted text.
+    symbols like U+D835) that may appear in PDF/PPT extracted text.
     """
     key_string = f"{model_name}:{prompt}"
     return hashlib.sha256(key_string.encode('utf-8', errors='surrogatepass')).hexdigest()

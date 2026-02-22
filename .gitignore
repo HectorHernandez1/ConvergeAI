@@ -38,6 +38,7 @@ env/
 
 # Environment variables
 .env
+.claude/
 
 # Logs
 logs/*.log
