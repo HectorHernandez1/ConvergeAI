@@ -1,6 +1,8 @@
 import json
 from abc import ABC, abstractmethod
+from typing import Optional
 from models import SolverResponse, Answer
+from utils.image_types import ExtractedImage
 
 class BaseSolver(ABC):
     def __init__(self, model_name: str):
@@ -8,7 +10,8 @@ class BaseSolver(ABC):
 
     @abstractmethod
     async def solve(self, problem: str, references: str = None,
-                    previous_answers: dict = None, iteration: int = 1) -> SolverResponse:
+                    previous_answers: dict = None, iteration: int = 1,
+                    images: Optional[list[ExtractedImage]] = None) -> SolverResponse:
         pass
 
     @abstractmethod

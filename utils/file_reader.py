@@ -1,4 +1,5 @@
 import hashlib
+import mimetypes
 import warnings
 from pathlib import Path
 from typing import Optional, Tuple
@@ -8,6 +9,9 @@ import pymupdf as fitz
 from pptx import Presentation
 from bs4 import BeautifulSoup
 from config import settings
+from utils.image_types import ExtractedContent, ExtractedImage
+
+IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
 
 def extract_text(file_path: str) -> str:
     """Extract text from PDF, PPT/PPTX, or HTML file."""
@@ -41,6 +45,95 @@ def extract_text(file_path: str) -> str:
 
     raise ValueError(f"Failed to extract meaningful text from {file_path}. "
                      "Ensure the file is not a scanned image-only document or corrupted.")
+
+
+def extract_content(file_path: str) -> ExtractedContent:
+    """Extract text and images from a supported file.
+
+    For PDFs: extracts text (existing chain) + embedded images via pymupdf.
+    For image files (PNG/JPG/etc.): returns empty text with the image.
+    For PPT/HTML: extracts text only (no image extraction).
+    """
+    path = Path(file_path)
+    suffix = path.suffix.lower()
+
+    # Direct image file
+    if suffix in IMAGE_EXTENSIONS:
+        return _load_image_file(file_path)
+
+    # PDF: extract text + images
+    if suffix == '.pdf':
+        text = _try_pdf_extraction(file_path) or ""
+        images = _extract_pdf_images(file_path)
+        if not text.strip() and not images:
+            raise ValueError(f"Failed to extract content from {file_path}. "
+                             "Ensure the file is not a scanned image-only document or corrupted.")
+        return ExtractedContent(text=text, images=images)
+
+    # PPT/HTML: text only for now
+    if suffix in ['.ppt', '.pptx']:
+        text = _try_ppt_extraction(file_path) or ""
+    elif suffix in ['.html', '.htm']:
+        text = _try_html_extraction(file_path) or ""
+    else:
+        text = ""
+
+    if not text.strip():
+        raise ValueError(f"Failed to extract meaningful text from {file_path}. "
+                         "Ensure the file is not a scanned image-only document or corrupted.")
+    return ExtractedContent(text=text, images=[])
+
+
+def _extract_pdf_images(pdf_path: str) -> list[ExtractedImage]:
+    """Extract embedded images from PDF using pymupdf.
+
+    Skips tiny images (< 5KB) which are typically icons/decorations.
+    """
+    max_images = settings.max_images
+    images = []
+    try:
+        doc = fitz.open(pdf_path)
+        for page_num, page in enumerate(doc):
+            if len(images) >= max_images:
+                break
+            image_list = page.get_images(full=True)
+            for img_index, img_info in enumerate(image_list):
+                if len(images) >= max_images:
+                    break
+                xref = img_info[0]
+                base_image = doc.extract_image(xref)
+                if base_image and len(base_image["image"]) >= 5000:
+                    ext = base_image["ext"]
+                    media_type = f"image/{ext}" if ext != "jpg" else "image/jpeg"
+                    images.append(ExtractedImage(
+                        data=base_image["image"],
+                        media_type=media_type,
+                        source_page=page_num + 1,
+                        label=f"Page {page_num + 1}, Image {img_index + 1}"
+                    ))
+        doc.close()
+    except Exception:
+        pass
+    return images
+
+
+def _load_image_file(file_path: str) -> ExtractedContent:
+    """Load a standalone image file as ExtractedContent with no text."""
+    path = Path(file_path)
+    mime_type, _ = mimetypes.guess_type(file_path)
+    if not mime_type or not mime_type.startswith("image/"):
+        mime_type = "image/png"
+
+    with open(file_path, "rb") as f:
+        data = f.read()
+
+    image = ExtractedImage(
+        data=data,
+        media_type=mime_type,
+        label=path.name
+    )
+    return ExtractedContent(text="", images=[image])
+
 
 def _try_pdf_extraction(pdf_path: str) -> Optional[str]:
     """Try to extract text from PDF using fallback chain."""

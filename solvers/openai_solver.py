@@ -1,9 +1,11 @@
 import json
+from typing import Optional
 from openai import AsyncOpenAI
 from tenacity import retry, stop_after_attempt, wait_exponential
 from models import SolverResponse
 from config import settings
 from utils.cache import get_cache_key, get_cached_response, cache_response
+from utils.image_types import ExtractedImage
 from .base_solver import BaseSolver
 from utils.token_counter import count_openai_tokens
 
@@ -14,16 +16,24 @@ class OpenAISolver(BaseSolver):
         self.model = settings.openai_model
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
-    async def solve(self, problem: str, references: str = None, 
-                    previous_answers: dict = None, iteration: int = 1) -> SolverResponse:
+    async def solve(self, problem: str, references: str = None,
+                    previous_answers: dict = None, iteration: int = 1,
+                    images: Optional[list[ExtractedImage]] = None) -> SolverResponse:
         prompt = self._build_prompt(problem, references, previous_answers, iteration)
-        
-        if settings.enable_cache:
+
+        use_cache = settings.enable_cache and not images
+        if use_cache:
             cache_key = get_cache_key(self.model_name, prompt)
             cached = get_cached_response(cache_key)
             if cached:
                 return SolverResponse(**json.loads(cached))
-        
+
+        # Build user message content (vision-aware)
+        if images:
+            user_content = self._build_vision_content(prompt, images)
+        else:
+            user_content = prompt
+
         # Determine which parameter to use for token limits
         # GPT-5.x models use max_completion_tokens
         # GPT-4.x models (including gpt-4.1-nano, gpt-4o, gpt-4-turbo) use max_tokens
@@ -34,7 +44,7 @@ class OpenAISolver(BaseSolver):
             "model": self.model,
             "messages": [
                 {"role": "system", "content": "You are an expert academic assistant. Always respond with valid JSON only, no markdown fences."},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": user_content}
             ],
             "temperature": 0.3 if iteration == 1 else 0.5,
         }
@@ -63,11 +73,27 @@ class OpenAISolver(BaseSolver):
             cost_usd=cost
         )
         
-        if settings.enable_cache:
+        if use_cache:
             cache_response(cache_key, solver_response.model_dump_json())
-        
+
         return solver_response
     
+    def _build_vision_content(self, prompt: str, images: list[ExtractedImage]) -> list[dict]:
+        """Build OpenAI vision-format content array with text + images."""
+        image_index = "\n\nThe following images are attached:\n"
+        for i, img in enumerate(images, 1):
+            image_index += f"- Image {i}: {img.label}\n"
+        image_index += "\nRefer to these images when answering questions that involve charts, graphs, figures, or visual data.\n"
+
+        content = [{"type": "text", "text": prompt + image_index}]
+        for img in images:
+            data_url = f"data:{img.media_type};base64,{img.to_base64()}"
+            content.append({
+                "type": "image_url",
+                "image_url": {"url": data_url, "detail": "auto"}
+            })
+        return content
+
     def count_tokens(self, text: str) -> int:
         return count_openai_tokens(text)
     

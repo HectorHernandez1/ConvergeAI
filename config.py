@@ -38,6 +38,8 @@ class Settings(BaseModel):
     enable_cache: bool = False
     cache_ttl_hours: int = 24
 
+    max_images: int = 20
+
     similarity_threshold: float = 0.85
     numerical_tolerance: float = 0.01
 

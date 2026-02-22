@@ -11,7 +11,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 from models import FinalOutput, IterationLog
 from config import settings
-from utils.file_reader import extract_text
+from typing import Tuple
+from utils.file_reader import extract_text, extract_content
 from utils.comparator import compare_answers, get_disagreement_summary
 from pathlib import Path
 from solvers.openai_solver import OpenAISolver
@@ -27,34 +28,35 @@ def sanitize_text(text: str) -> str:
     text = text.encode('utf-8', errors='ignore').decode('utf-8')
     return text
 
-def extract_references() -> Optional[str]:
-    """Automatically detect and extract text from references/ folder."""
+def extract_references() -> Tuple[Optional[str], list]:
+    """Automatically detect and extract text and images from references/ folder."""
     reference_dir = Path("references")
-    
+
     if not reference_dir.exists():
-        return None
-    
+        return None, []
+
     all_files = list(reference_dir.glob("*"))
     doc_files = [f for f in all_files if f.suffix.lower() in ['.pdf', '.ppt', '.pptx', '.html', '.htm']]
-    
+
     if not doc_files:
-        return None
-    
+        return None, []
+
     console.print(f"[dim]Found {len(doc_files)} reference document(s) in references/[/dim]")
-    
+
     combined_texts = []
+    combined_images = []
     for doc_file in sorted(doc_files):
         try:
-            text = extract_text(str(doc_file))
-            text = sanitize_text(text)
-            combined_texts.append(f"# Reference: {doc_file.name}\n\n{text}")
+            content = extract_content(str(doc_file))
+            text = sanitize_text(content.text) if content.text else ""
+            if text:
+                combined_texts.append(f"# Reference: {doc_file.name}\n\n{text}")
+            combined_images.extend(content.images)
         except Exception as e:
             console.print(f"[yellow]Warning: Failed to extract {doc_file.name}: {e}[/yellow]")
-    
-    if combined_texts:
-        return "\n\n".join(combined_texts)
-    
-    return None
+
+    text_result = "\n\n".join(combined_texts) if combined_texts else None
+    return text_result, combined_images
 
 def _check_cost_warning(current_cost: float, max_cost: float, iteration: int, is_final: bool = False):
     """Display cost warnings before running an iteration."""
@@ -78,8 +80,17 @@ async def run_consensus(problem_path: str,
     cost_limit = max_cost if max_cost is not None else settings.max_cost_usd
     
     console.print(f"[bold blue]Processing problem:[/bold blue] {problem_path}")
-    problem_text = sanitize_text(extract_text(problem_path))
-    references_text = extract_references()  # Extracts from references/ folder (PDFs and PPTs)
+    content = extract_content(problem_path)
+    problem_text = sanitize_text(content.text) if content.text else ""
+    problem_images = content.images
+
+    if not problem_text and problem_images:
+        problem_text = "Please analyze the attached image(s) and solve any problems or answer any questions shown."
+
+    references_text, reference_images = extract_references()
+    all_images = (problem_images + reference_images) or None
+    if all_images:
+        console.print(f"[dim]Sending {len(all_images)} image(s) to vision APIs[/dim]")
     
     openai_solver = OpenAISolver()
     anthropic_solver = AnthropicSolver()
@@ -96,28 +107,30 @@ async def run_consensus(problem_path: str,
             
             if iteration == 1:
                 response_a, response_b = await asyncio.gather(
-                    openai_solver.solve(problem_text, references_text, iteration=iteration),
-                    anthropic_solver.solve(problem_text, references_text, iteration=iteration)
+                    openai_solver.solve(problem_text, references_text, iteration=iteration, images=all_images),
+                    anthropic_solver.solve(problem_text, references_text, iteration=iteration, images=all_images)
                 )
             else:
                 previous_comparison = iteration_logs[-1].comparison
                 disagreement_summary = get_disagreement_summary(previous_comparison.differing_questions)
-                
+
                 response_a, response_b = await asyncio.gather(
-                    openai_solver.solve(problem_text, references_text, 
+                    openai_solver.solve(problem_text, references_text,
                                       previous_answers={
                                           "your_answers": [a.model_dump() for a in model_responses["OpenAI"][-1].answers],
                                           "other_answers": [a.model_dump() for a in model_responses["Anthropic"][-1].answers],
                                           "disagreement_summary": disagreement_summary
-                                      }, 
-                                      iteration=iteration),
+                                      },
+                                      iteration=iteration,
+                                      images=all_images),
                     anthropic_solver.solve(problem_text, references_text,
                                          previous_answers={
                                              "your_answers": [a.model_dump() for a in model_responses["Anthropic"][-1].answers],
                                              "other_answers": [a.model_dump() for a in model_responses["OpenAI"][-1].answers],
                                              "disagreement_summary": disagreement_summary
                                          },
-                                         iteration=iteration)
+                                         iteration=iteration,
+                                         images=all_images)
                 )
             
             model_responses["OpenAI"].append(response_a)
@@ -373,7 +386,7 @@ def main():
     
     if not problem_path:
         input_dir = Path(settings.input_dir)
-        supported_extensions = ['.pdf', '.ppt', '.pptx', '.html', '.htm']
+        supported_extensions = ['.pdf', '.ppt', '.pptx', '.html', '.htm', '.png', '.jpg', '.jpeg', '.gif', '.webp']
         doc_files = [f for f in input_dir.iterdir() if f.is_file() and f.suffix.lower() in supported_extensions]
         
         if not doc_files:

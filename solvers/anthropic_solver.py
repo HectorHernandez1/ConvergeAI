@@ -1,9 +1,11 @@
 import json
+from typing import Optional
 from anthropic import AsyncAnthropic
 from tenacity import retry, stop_after_attempt, wait_exponential
 from models import SolverResponse
 from config import settings
 from utils.cache import get_cache_key, get_cached_response, cache_response
+from utils.image_types import ExtractedImage
 from .base_solver import BaseSolver
 
 class AnthropicSolver(BaseSolver):
@@ -13,22 +15,30 @@ class AnthropicSolver(BaseSolver):
         self.model = settings.anthropic_model
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
-    async def solve(self, problem: str, references: str = None, 
-                    previous_answers: dict = None, iteration: int = 1) -> SolverResponse:
+    async def solve(self, problem: str, references: str = None,
+                    previous_answers: dict = None, iteration: int = 1,
+                    images: Optional[list[ExtractedImage]] = None) -> SolverResponse:
         prompt = self._build_prompt(problem, references, previous_answers, iteration)
-        
-        if settings.enable_cache:
+
+        use_cache = settings.enable_cache and not images
+        if use_cache:
             cache_key = get_cache_key(self.model_name, prompt)
             cached = get_cached_response(cache_key)
             if cached:
                 return SolverResponse(**json.loads(cached))
-        
+
+        # Build user message content (vision-aware)
+        if images:
+            user_content = self._build_vision_content(prompt, images)
+        else:
+            user_content = prompt
+
         response = await self.client.messages.create(
             model=self.model,
             max_tokens=settings.max_tokens,
             temperature=0.3 if iteration == 1 else 0.5,
             messages=[
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": user_content}
             ],
             system="You are an expert academic assistant. Always respond with valid JSON only, no markdown fences."
         )
@@ -49,11 +59,31 @@ class AnthropicSolver(BaseSolver):
             cost_usd=cost
         )
         
-        if settings.enable_cache:
+        if use_cache:
             cache_response(cache_key, solver_response.model_dump_json())
-        
+
         return solver_response
     
+    def _build_vision_content(self, prompt: str, images: list[ExtractedImage]) -> list[dict]:
+        """Build Anthropic vision-format content array with images before text."""
+        image_index = "\n\nThe following images are attached:\n"
+        for i, img in enumerate(images, 1):
+            image_index += f"- Image {i}: {img.label}\n"
+        image_index += "\nRefer to these images when answering questions that involve charts, graphs, figures, or visual data.\n"
+
+        content = []
+        for img in images:
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": img.media_type,
+                    "data": img.to_base64()
+                }
+            })
+        content.append({"type": "text", "text": prompt + image_index})
+        return content
+
     def count_tokens(self, text: str) -> int:
         return len(text) // 4
     
