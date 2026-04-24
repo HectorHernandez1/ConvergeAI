@@ -10,6 +10,8 @@ from .base_solver import BaseSolver
 from utils.token_counter import count_openai_tokens
 
 class OpenAISolver(BaseSolver):
+    short_name = "OpenAI"
+
     def __init__(self):
         super().__init__("OpenAI " + settings.openai_model)
         self.client = AsyncOpenAI(api_key=settings.openai_api_key)

@@ -1,6 +1,6 @@
 import json
 from typing import Optional
-from anthropic import AsyncAnthropic
+import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 from models import SolverResponse
 from config import settings
@@ -8,14 +8,30 @@ from utils.cache import get_cache_key, get_cached_response, cache_response
 from utils.image_types import ExtractedImage
 from .base_solver import BaseSolver
 
-class AnthropicSolver(BaseSolver):
-    short_name = "Anthropic"
+# Known vision-capable Ollama model prefixes
+VISION_MODEL_PREFIXES = (
+    "gemma3", "gemma4",
+    "llava", "bakllava",
+    "llama3.2-vision", "llama4",
+    "minicpm-v",
+    "qwen2.5vl", "qwen2-vl", "qwen3-vl", "qwen3vl",
+    "moondream", "pixtral",
+)
 
-    def __init__(self):
-        super().__init__("Anthropic " + settings.anthropic_model)
-        self.client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-        self.model = settings.anthropic_model
-    
+
+def _model_supports_vision(model: str) -> bool:
+    name = model.lower()
+    return any(name.startswith(prefix) for prefix in VISION_MODEL_PREFIXES)
+
+
+class OllamaSolver(BaseSolver):
+    def __init__(self, model: str, short_name: Optional[str] = None):
+        super().__init__(f"Ollama {model}")
+        self.model = model
+        self.short_name = short_name or f"Ollama-{model}"
+        self.base_url = settings.ollama_base_url.rstrip("/")
+        self.supports_vision = _model_supports_vision(model)
+
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def solve(self, problem: str, references: str = None,
                     previous_answers: dict = None, iteration: int = 1,
@@ -29,28 +45,40 @@ class AnthropicSolver(BaseSolver):
             if cached:
                 return SolverResponse(**json.loads(cached))
 
-        # Build user message content (vision-aware)
-        if images:
-            user_content = self._build_vision_content(prompt, images)
-        else:
-            user_content = prompt
+        user_message = {"role": "user", "content": prompt}
+        if images and self.supports_vision:
+            user_message["images"] = [img.to_base64() for img in images]
+            image_index = "\n\nThe following images are attached:\n"
+            for i, img in enumerate(images, 1):
+                image_index += f"- Image {i}: {img.label}\n"
+            image_index += "\nRefer to these images when answering questions that involve charts, graphs, figures, or visual data.\n"
+            user_message["content"] = prompt + image_index
 
-        response = await self.client.messages.create(
-            model=self.model,
-            max_tokens=settings.max_tokens,
-            temperature=0.3 if iteration == 1 else 0.5,
-            messages=[
-                {"role": "user", "content": user_content}
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": "You are an expert academic assistant. Always respond with valid JSON only, no markdown fences."},
+                user_message,
             ],
-            system="You are an expert academic assistant. Always respond with valid JSON only, no markdown fences."
-        )
-        
-        output_text = response.content[0].text
-        input_tokens = response.usage.input_tokens
-        output_tokens = response.usage.output_tokens
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0.3 if iteration == 1 else 0.5,
+                "num_predict": settings.max_tokens,
+            },
+        }
+
+        async with httpx.AsyncClient(timeout=settings.ollama_timeout) as client:
+            response = await client.post(f"{self.base_url}/api/chat", json=payload)
+            response.raise_for_status()
+            data = response.json()
+
+        output_text = data["message"]["content"]
+        input_tokens = data.get("prompt_eval_count", 0)
+        output_tokens = data.get("eval_count", 0)
         total_tokens = input_tokens + output_tokens
         cost = self.estimate_cost(input_tokens, output_tokens)
-        
+
         response_data = self._parse_response(output_text)
         normalized_answers = self._normalize_answers(response_data["answers"])
         solver_response = SolverResponse(
@@ -58,46 +86,20 @@ class AnthropicSolver(BaseSolver):
             iteration=iteration,
             answers=normalized_answers,
             tokens_used=total_tokens,
-            cost_usd=cost
+            cost_usd=cost,
         )
-        
+
         if use_cache:
             cache_response(cache_key, solver_response.model_dump_json())
 
         return solver_response
-    
-    def _build_vision_content(self, prompt: str, images: list[ExtractedImage]) -> list[dict]:
-        """Build Anthropic vision-format content array with images before text."""
-        image_index = "\n\nThe following images are attached:\n"
-        for i, img in enumerate(images, 1):
-            image_index += f"- Image {i}: {img.label}\n"
-        image_index += "\nRefer to these images when answering questions that involve charts, graphs, figures, or visual data.\n"
-
-        content = []
-        for img in images:
-            content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": img.media_type,
-                    "data": img.to_base64()
-                }
-            })
-        content.append({"type": "text", "text": prompt + image_index})
-        return content
 
     def count_tokens(self, text: str) -> int:
         return len(text) // 4
-    
+
     def estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
-        pricing = {
-            "claude-sonnet-4-5": {"input": 0.003, "output": 0.015},
-            "claude-haiku-4-5": {"input": 0.001, "output": 0.005},
-            "claude-opus-4-5": {"input": 0.005, "output": 0.025},
-        }
-        rates = pricing.get(self.model, {"input": 0.003, "output": 0.015})
-        return (input_tokens / 1000 * rates["input"]) + (output_tokens / 1000 * rates["output"])
-    
+        return 0.0
+
     def _build_prompt(self, problem: str, references: str, previous_answers: dict, iteration: int) -> str:
         if iteration == 1:
             with open("prompts/initial_solve.txt", "r") as f:
@@ -111,31 +113,25 @@ class AnthropicSolver(BaseSolver):
                 problem_text=problem,
                 your_previous_answers=json.dumps(previous_answers["your_answers"], indent=2),
                 other_model_answers=json.dumps(previous_answers["other_answers"], indent=2),
-                disagreement_summary=previous_answers["disagreement_summary"]
+                disagreement_summary=previous_answers["disagreement_summary"],
             )
-    
+
     def _parse_response(self, output: str) -> dict:
         try:
             data = json.loads(output.strip())
-            
             if isinstance(data, list):
                 return {"answers": data}
-            
             if "answers" not in data:
                 raise ValueError("Missing 'answers' field")
             return data
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             if "```json" in output:
                 json_start = output.find("```json") + 7
                 json_end = output.find("```", json_start)
                 if json_end > json_start:
-                    extracted = output[json_start:json_end].strip()
-                    try:
-                        data = json.loads(extracted)
-                        if isinstance(data, list):
-                            return {"answers": data}
-                        if "answers" in data:
-                            return data
-                    except json.JSONDecodeError:
-                        pass
-            raise ValueError("Invalid JSON response from model")
+                    data = json.loads(output[json_start:json_end].strip())
+                    if isinstance(data, list):
+                        return {"answers": data}
+                    if "answers" in data:
+                        return data
+            raise ValueError("Invalid JSON response from Ollama model")

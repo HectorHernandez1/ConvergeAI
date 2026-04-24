@@ -5,8 +5,12 @@ from models import SolverResponse, Answer
 from utils.image_types import ExtractedImage
 
 class BaseSolver(ABC):
+    short_name: str = ""
+
     def __init__(self, model_name: str):
         self.model_name = model_name
+        if not self.short_name:
+            self.short_name = model_name
 
     @abstractmethod
     async def solve(self, problem: str, references: str = None,

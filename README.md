@@ -1,15 +1,17 @@
 # ConvergeAI
 
-AI consensus problem solver using OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5 to solve academic problems through iterative consensus-building.
+AI consensus problem solver that runs two models in parallel to solve academic problems through iterative consensus-building. Default pair: OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5. Also supports local open-source models via [Ollama](https://ollama.com) (Gemma, Qwen, DeepSeek-R1, Llama, etc.) — mix cloud and local, or run fully offline.
 
 ## Features
 
-- **Dual Model Approach**: Leverages both OpenAI GPT and Anthropic Claude for robust solutions
+- **Pluggable Model Pair**: Any two of OpenAI, Anthropic, or local Ollama models
+- **Local Open-Source Models**: Run Gemma 4, Qwen 3/3.5, DeepSeek-R1, etc. via Ollama (zero API cost)
 - **Iterative Consensus**: Models compare and refine answers (up to 5 iterations) until agreement
 - **Early Stop Optimization**: Stops at 90% agreement by default for cost efficiency
 - **PDF Extraction**: Automatic fallback chain (PyPDF2 → pdfplumber → pymupdf)
 - **PPT Support**: Extracts text from PPT/PPTX files including tables using python-pptx
 - **HTML Support**: Extracts text from HTML files, removing scripts and styles
+- **Vision-aware**: Auto-detects vision capability; passes images to multimodal models, skips for text-only
 - **Optional Caching**: Reduces API costs for repeat queries (disabled by default in production)
 - **Cache Management**: CLI flags for clearing cache or disabling per-run
 - **Token & Cost Tracking**: Real-time monitoring of API usage and costs
@@ -38,6 +40,16 @@ cp .env.example .env
 ```env
 OPENAI_API_KEY=sk-your-openai-api-key
 ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
+```
+
+> Only needed if you plan to use OpenAI or Anthropic. If you run two local Ollama models, no API keys are required.
+
+5. (Optional) Install [Ollama](https://ollama.com) and pull models for local inference:
+```bash
+# Install from https://ollama.com/download, then:
+ollama pull gemma4:31b
+ollama pull qwen3.5:35b-a3b
+ollama list        # confirm models are installed
 ```
 
 ## Usage
@@ -99,6 +111,29 @@ python main.py --problem input/quiz.pdf --clear-cache
 python main.py --problem input/quiz.pdf --no-cache
 ```
 
+### Choosing the Solver Pair
+
+By default ConvergeAI runs `openai` ↔ `anthropic`. Use `--solvers` to change the pair. Each entry is one of:
+
+- `openai` — uses `settings.openai_model`
+- `anthropic` — uses `settings.anthropic_model`
+- `ollama:<model>` — any model visible in `ollama list` (model names may contain colons, e.g. `gemma4:31b`)
+
+```bash
+# Cloud pair (default)
+python main.py --solvers openai,anthropic
+
+# Two local open-source models — fully offline, zero API cost
+python main.py --solvers ollama:gemma4:31b,ollama:qwen3.5:35b-a3b
+
+# Mix cloud + local
+python main.py --solvers openai,ollama:gemma4:31b
+```
+
+**Vision handling:** image input is automatically sent to multimodal models (gemma3/4, llava, llama3.2-vision, minicpm-v, qwen*vl, moondream, pixtral) and silently skipped for text-only models. If your problem relies on visuals (charts, figures), pair at least one vision-capable model.
+
+**Performance:** large local models (20B+ params) can take minutes per iteration on modest hardware. Default timeout is 30 min per request, configurable via `ollama_timeout` in `config.py`.
+
 ## Configuration
 
 ### About config.py
@@ -131,6 +166,9 @@ To change application settings, edit [config.py](config.py) directly. Available 
   - claude-sonnet-4-5: $0.003/1K input, $0.015/1K output (balanced default)
   - claude-haiku-4-5: $0.001/1K input, $0.005/1K output (cost-effective)
   - claude-opus-4-5: $0.005/1K input, $0.025/1K output (most capable)
+- `SOLVERS`: Default `["openai", "anthropic"]` — the two solvers the consensus loop instantiates. Overridable via `--solvers`.
+- `OLLAMA_BASE_URL`: Default `http://localhost:11434` (Ollama server URL)
+- `OLLAMA_TIMEOUT`: Default `1800.0` seconds (30 min) — large local models can be slow
 - `MAX_TOKENS`: Default `8000` (max response tokens for all models)
 - `MAX_ITERATIONS`: Default `5`
 - `EARLY_STOP_THRESHOLD`: Default `0.90` (90% - stops iteration early for efficiency)
@@ -175,9 +213,11 @@ ConvergeAI/
 ├── config.py                  # Configuration and environment loading
 ├── models.py                  # Pydantic models for type safety
 ├── solvers/
+│   ├── __init__.py            # Solver factory (build_solver)
 │   ├── base_solver.py         # Abstract base class
 │   ├── openai_solver.py       # GPT-5 implementation
-│   └── anthropic_solver.py    # Claude implementation
+│   ├── anthropic_solver.py    # Claude implementation
+│   └── ollama_solver.py       # Local Ollama models implementation
 ├── utils/
 │   ├── file_reader.py         # File extraction with fallback chain (PDF/PPT/HTML)
 │   ├── comparator.py          # Answer comparison logic
@@ -221,7 +261,7 @@ pytest --cov=. --cov-report=html
 ## Future Enhancements
 
 - Support for image-based PDFs (OCR integration)
-- Additional models (Gemini, Llama via API)
+- Additional cloud providers (Gemini, xAI)
 - Web interface for non-CLI users
 - Batch processing multiple problems
 - Fine-tuned prompts for specific subjects (math, coding, essays)

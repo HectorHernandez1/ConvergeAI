@@ -15,8 +15,7 @@ from typing import Tuple
 from utils.file_reader import extract_text, extract_content
 from utils.comparator import compare_answers, get_disagreement_summary
 from pathlib import Path
-from solvers.openai_solver import OpenAISolver
-from solvers.anthropic_solver import AnthropicSolver
+from solvers import build_solver
 
 console = Console()
 
@@ -71,14 +70,18 @@ def _check_cost_warning(current_cost: float, max_cost: float, iteration: int, is
     elif not is_final and iteration > 1:
         console.print(f"[dim]💰 Running iteration {iteration} | Total cost so far: ${current_cost:.4f}[/dim]")
 
-async def run_consensus(problem_path: str, 
+async def run_consensus(problem_path: str,
                        max_iterations: int = None,
                        early_stop_threshold: float = None,
-                       max_cost: float = None) -> FinalOutput:
+                       max_cost: float = None,
+                       solver_specs: Optional[list] = None) -> FinalOutput:
     max_iterations = max_iterations or settings.max_iterations
     early_stop = early_stop_threshold if early_stop_threshold is not None else settings.early_stop_threshold
     cost_limit = max_cost if max_cost is not None else settings.max_cost_usd
-    
+    specs = solver_specs or settings.solvers
+    if len(specs) != 2:
+        raise ValueError(f"Exactly 2 solvers required, got {len(specs)}: {specs}")
+
     console.print(f"[bold blue]Processing problem:[/bold blue] {problem_path}")
     content = extract_content(problem_path)
     problem_text = sanitize_text(content.text) if content.text else ""
@@ -91,57 +94,61 @@ async def run_consensus(problem_path: str,
     all_images = (problem_images + reference_images) or None
     if all_images:
         console.print(f"[dim]Sending {len(all_images)} image(s) to vision APIs[/dim]")
-    
-    openai_solver = OpenAISolver()
-    anthropic_solver = AnthropicSolver()
-    
+
+    solver_a = build_solver(specs[0])
+    solver_b = build_solver(specs[1])
+    name_a, name_b = solver_a.short_name, solver_b.short_name
+    console.print(f"[dim]Solvers: {solver_a.model_name} ↔ {solver_b.model_name}[/dim]")
+
     iteration_logs = []
     total_cost = 0.0
-    model_responses = {"OpenAI": [], "Anthropic": []}
-    
+    model_responses = {name_a: [], name_b: []}
+
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
         for iteration in range(1, max_iterations + 1):
             task = progress.add_task(f"[cyan]Iteration {iteration}/{max_iterations}...", total=None)
-            
+
             _check_cost_warning(total_cost, cost_limit, iteration)
-            
+
             if iteration == 1:
                 response_a, response_b = await asyncio.gather(
-                    openai_solver.solve(problem_text, references_text, iteration=iteration, images=all_images),
-                    anthropic_solver.solve(problem_text, references_text, iteration=iteration, images=all_images)
+                    solver_a.solve(problem_text, references_text, iteration=iteration, images=all_images),
+                    solver_b.solve(problem_text, references_text, iteration=iteration, images=all_images)
                 )
             else:
                 previous_comparison = iteration_logs[-1].comparison
-                disagreement_summary = get_disagreement_summary(previous_comparison.differing_questions)
+                disagreement_summary = get_disagreement_summary(
+                    previous_comparison.differing_questions, name_a, name_b
+                )
 
                 response_a, response_b = await asyncio.gather(
-                    openai_solver.solve(problem_text, references_text,
-                                      previous_answers={
-                                          "your_answers": [a.model_dump() for a in model_responses["OpenAI"][-1].answers],
-                                          "other_answers": [a.model_dump() for a in model_responses["Anthropic"][-1].answers],
-                                          "disagreement_summary": disagreement_summary
-                                      },
-                                      iteration=iteration,
-                                      images=all_images),
-                    anthropic_solver.solve(problem_text, references_text,
-                                         previous_answers={
-                                             "your_answers": [a.model_dump() for a in model_responses["Anthropic"][-1].answers],
-                                             "other_answers": [a.model_dump() for a in model_responses["OpenAI"][-1].answers],
-                                             "disagreement_summary": disagreement_summary
-                                         },
-                                         iteration=iteration,
-                                         images=all_images)
+                    solver_a.solve(problem_text, references_text,
+                                   previous_answers={
+                                       "your_answers": [a.model_dump() for a in model_responses[name_a][-1].answers],
+                                       "other_answers": [a.model_dump() for a in model_responses[name_b][-1].answers],
+                                       "disagreement_summary": disagreement_summary
+                                   },
+                                   iteration=iteration,
+                                   images=all_images),
+                    solver_b.solve(problem_text, references_text,
+                                   previous_answers={
+                                       "your_answers": [a.model_dump() for a in model_responses[name_b][-1].answers],
+                                       "other_answers": [a.model_dump() for a in model_responses[name_a][-1].answers],
+                                       "disagreement_summary": disagreement_summary
+                                   },
+                                   iteration=iteration,
+                                   images=all_images)
                 )
-            
-            model_responses["OpenAI"].append(response_a)
-            model_responses["Anthropic"].append(response_b)
-            
+
+            model_responses[name_a].append(response_a)
+            model_responses[name_b].append(response_b)
+
             total_cost += response_a.cost_usd + response_b.cost_usd
-            
+
             if total_cost > cost_limit:
                 console.print(f"[bold red]💰 Cost limit (${cost_limit:.2f}) exceeded! Stopping early.[/bold red]")
                 break
-            
+
             comparison = compare_answers(response_a, response_b)
             iteration_log = IterationLog(
                 iteration=iteration,
@@ -150,24 +157,24 @@ async def run_consensus(problem_path: str,
                 timestamp=datetime.now()
             )
             iteration_logs.append(iteration_log)
-            
+
             total_questions = len(comparison.matching_questions) + len(comparison.differing_questions)
             progress.update(task, description=f"[cyan]Iteration {iteration}/{max_iterations}: {comparison.agreement_percentage:.1f}% agreement | {len(comparison.matching_questions)}/{total_questions} questions in consensus[/cyan]")
-            
+
             if comparison.agreement_percentage >= (settings.agreement_threshold * 100):
                 console.print(f"[bold green]✓ 100% agreement reached at iteration {iteration}![/bold green]")
                 break
-            
+
             if comparison.agreement_percentage >= (early_stop * 100):
                 console.print(f"[bold green]✓ {early_stop*100:.0f}% agreement threshold reached at iteration {iteration}![/bold green]")
                 break
-            
+
             if iteration >= max_iterations:
                 console.print(f"[bold yellow]⚠️  Reached max iterations ({max_iterations}) with {comparison.agreement_percentage:.1f}% agreement[/bold yellow]")
-    
+
     final_comparison = iteration_logs[-1].comparison
-    consensus_answers = _determine_consensus(model_responses, final_comparison)
-    
+    consensus_answers = _determine_consensus(model_responses, final_comparison, name_a, name_b)
+
     return FinalOutput(
         timestamp=datetime.now(),
         iterations_needed=len(iteration_logs),
@@ -178,24 +185,22 @@ async def run_consensus(problem_path: str,
         total_cost_usd=total_cost
     )
 
-def _determine_consensus(model_responses: dict, comparison) -> list:
-    from models import Answer
-    
+def _determine_consensus(model_responses: dict, comparison, name_a: str, name_b: str) -> list:
     consensus = []
-    latest_openai = model_responses["OpenAI"][-1]
-    latest_anthropic = model_responses["Anthropic"][-1]
-    
-    openai_answers = {a.question_number: a for a in latest_openai.answers}
-    anthropic_answers = {a.question_number: a for a in latest_anthropic.answers}
-    
+    latest_a = model_responses[name_a][-1]
+    latest_b = model_responses[name_b][-1]
+
+    answers_a = {a.question_number: a for a in latest_a.answers}
+    answers_b = {a.question_number: a for a in latest_b.answers}
+
     for q_num in comparison.matching_questions:
-        consensus.append(openai_answers[q_num])
-    
+        consensus.append(answers_a.get(q_num) or answers_b.get(q_num))
+
     for diff in comparison.differing_questions:
         q_num = diff["question_number"]
-        answer_a = openai_answers.get(q_num)
-        answer_b = anthropic_answers.get(q_num)
-        
+        answer_a = answers_a.get(q_num)
+        answer_b = answers_b.get(q_num)
+
         if answer_a and answer_b:
             if answer_a.confidence == "high" and answer_b.confidence != "high":
                 consensus.append(answer_a)
@@ -207,8 +212,8 @@ def _determine_consensus(model_responses: dict, comparison) -> list:
             consensus.append(answer_a)
         elif answer_b:
             consensus.append(answer_b)
-    
-    return sorted(consensus, key=lambda x: x.question_number)
+
+    return sorted([c for c in consensus if c is not None], key=lambda x: x.question_number)
 
 def save_output(output: FinalOutput, problem_path: str):
     output_dir = Path(settings.output_dir)
@@ -378,9 +383,20 @@ def main():
     parser.add_argument("--max-iterations", type=int, help="Maximum iterations")
     parser.add_argument("--early-stop-threshold", type=float, help="Early stop threshold (0.0-1.0, default: 0.90)")
     parser.add_argument("--max-cost", type=float, help="Maximum cost in USD (default: 5.0)")
+    parser.add_argument("--solvers", type=str,
+                        help=("Comma-separated pair of solvers. Each is 'openai', 'anthropic', "
+                              "or 'ollama:<model>'. Example: "
+                              "--solvers ollama:gemma4:31b,ollama:qwen3.5:35b-a3b"))
     parser.add_argument("--verbose", action="store_true", help="Show detailed iteration output")
-    
+
     args = parser.parse_args()
+
+    solver_specs = None
+    if args.solvers:
+        solver_specs = [s.strip() for s in args.solvers.split(",") if s.strip()]
+        if len(solver_specs) != 2:
+            console.print(f"[bold red]Error:[/bold red] --solvers must list exactly 2 models, got {len(solver_specs)}")
+            return
     
     problem_path = args.problem
     
@@ -404,8 +420,9 @@ def main():
     
     console.print("[bold blue]ConvergeAI[/bold blue] - AI Consensus Problem Solver")
     
-    output = asyncio.run(run_consensus(problem_path, args.max_iterations, 
-                                          args.early_stop_threshold, args.max_cost))
+    output = asyncio.run(run_consensus(problem_path, args.max_iterations,
+                                          args.early_stop_threshold, args.max_cost,
+                                          solver_specs=solver_specs))
     
     save_output(output, problem_path)
     print_summary(output)

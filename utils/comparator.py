@@ -122,21 +122,25 @@ def _is_numeric_match(answer_a: str, answer_b: str) -> bool:
     
     return relative_diff <= settings.numerical_tolerance
 
-def get_disagreement_summary(differing_questions: list) -> str:
+def get_disagreement_summary(differing_questions: list,
+                             name_a: str = "Model A",
+                             name_b: str = "Model B") -> str:
     if not differing_questions:
         return "All questions in agreement."
-    
+
     summary_parts = []
     for diff in differing_questions:
         q_num = diff["question_number"]
         q_text = diff["question_text"]
-        
+
         answer_a_obj = diff.get("answer_a")
         answer_a = answer_a_obj.get("answer", "N/A") if answer_a_obj else "N/A"
-        
+
         answer_b_obj = diff.get("answer_b")
         answer_b = answer_b_obj.get("answer", "N/A") if answer_b_obj else "N/A"
-        
-        summary_parts.append(f"Question {q_num}: '{q_text}' - GPT says '{answer_a}', Claude says '{answer_b}'")
-    
+
+        summary_parts.append(
+            f"Question {q_num}: '{q_text}' - {name_a} says '{answer_a}', {name_b} says '{answer_b}'"
+        )
+
     return "\n".join(summary_parts)

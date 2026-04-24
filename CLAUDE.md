@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-ConvergeAI is an AI consensus problem solver that uses OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5 in parallel to solve academic problems through iterative consensus-building. The system runs up to 5 iterations where both models independently solve a problem, compare their answers, and refine their responses based on disagreements until reaching consensus or hitting iteration/cost limits.
+ConvergeAI is an AI consensus problem solver that runs two models in parallel to solve academic problems through iterative consensus-building. By default it uses OpenAI GPT-5.2 and Anthropic Claude Sonnet 4.5, but any pair is selectable, including local open-source models via Ollama (e.g. Gemma 4, Qwen 3/3.5, DeepSeek-R1). The system runs up to 5 iterations where both models independently solve a problem, compare their answers, and refine their responses based on disagreements until reaching consensus or hitting iteration/cost limits.
 
 ## Key Commands
 
@@ -28,7 +28,24 @@ python main.py --problem input/quiz.pdf --verbose
 # Cache management
 python main.py --problem input/quiz.pdf --clear-cache  # Clear cache before running
 python main.py --problem input/quiz.pdf --no-cache     # Disable cache for this run
+
+# Choose solver pair (default: openai,anthropic)
+# Each entry is "openai", "anthropic", or "ollama:<model>"
+python main.py --solvers openai,anthropic
+python main.py --solvers ollama:gemma4:31b,ollama:qwen3.5:35b-a3b
+python main.py --solvers openai,ollama:gemma4:31b
 ```
+
+### Ollama (local open-source models)
+Requires a running Ollama server (default: `http://localhost:11434`).
+```bash
+ollama list                         # show installed models
+ollama pull gemma4:31b              # download a model
+python main.py --solvers ollama:gemma4:31b,ollama:qwen3.5:35b-a3b
+```
+Vision is auto-detected by model name prefix (gemma3/4, llava, llama3.2-vision,
+minicpm-v, qwen2.5vl/qwen3-vl, moondream, pixtral). Non-vision models silently
+skip image inputs. Local models report `$0.00` cost.
 
 ### Testing
 ```bash
@@ -69,14 +86,18 @@ All AI integrations follow the `BaseSolver` abstract class:
 - `solve()`: Main async method that builds prompts, calls API, parses response
 - `count_tokens()`: Model-specific tokenization
 - `estimate_cost()`: Per-model pricing calculation
+- `short_name`: Display key used in `model_responses` and disagreement summaries
 
-Both `OpenAISolver` and `AnthropicSolver` implement this pattern with:
+`OpenAISolver`, `AnthropicSolver`, and `OllamaSolver` implement this pattern with:
 - Automatic retry logic (3 attempts with exponential backoff via tenacity)
 - Response caching (file-based, 24hr TTL, disabled by default)
 - Temperature adjustment (0.3 for iteration 1, 0.5 for subsequent)
 - Robust JSON parsing with fallback for markdown-fenced responses and list data
 - **OpenAI-specific**: Smart API parameter detection (`max_completion_tokens` for GPT-5.x models, `max_tokens` for GPT-4.x models)
 - **Anthropic-specific**: Uses `max_tokens` parameter for all Claude models
+- **Ollama-specific**: Hits `POST /api/chat` on the local server with `format=json`; vision capability auto-detected by model-name prefix (gemma3/4, llava, llama3.2-vision, minicpm-v, qwen*vl, moondream, pixtral); images passed via the `images` field; cost is always 0.
+
+`solvers/__init__.py` exposes `build_solver(spec)` which the consensus loop uses to instantiate a pair from strings like `"openai"`, `"anthropic"`, or `"ollama:gemma4:31b"`. The default pair lives in `config.py` as `settings.solvers`, and `--solvers` overrides it at the CLI.
 
 ### Answer Comparison Logic (utils/comparator.py)
 Three matching strategies applied in order:
@@ -131,6 +152,9 @@ ANTHROPIC_API_KEY=sk-ant-your-key
   - claude-sonnet-4-5: $0.003/1K input, $0.015/1K output
   - claude-haiku-4-5: $0.001/1K input, $0.005/1K output (cost-effective)
   - claude-opus-4-5: $0.005/1K input, $0.025/1K output (most capable)
+- `SOLVERS`: Default `["openai", "anthropic"]` — which two solvers the consensus loop instantiates
+- `OLLAMA_BASE_URL`: Default `http://localhost:11434`
+- `OLLAMA_TIMEOUT`: Default `1800.0` seconds (30 min) — large local models can be slow
 - `MAX_TOKENS`: Default `8000` (max response tokens for all models)
 - `MAX_ITERATIONS`: Default `5`
 - `EARLY_STOP_THRESHOLD`: Default `0.90` (90% agreement - stops iteration early for efficiency)

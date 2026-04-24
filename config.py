@@ -23,6 +23,16 @@ class Settings(BaseModel):
     # claude-opus-4-5 ($0.005/input 1k Tok, $0.025/output 1k Tok)
     anthropic_model: str = "claude-sonnet-4-6"
 
+    # Ollama (local open-source models via Ollama runtime)
+    # Run `ollama list` to see installed models.
+    # Examples: "gemma4:31b" (vision), "qwen3.5:35b-a3b", "deepseek-r1:32b".
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_timeout: float = 1800.0  # 30 min — large local models can be slow
+
+    # Solver pair used for consensus. Each entry is either "openai", "anthropic",
+    # or "ollama:<model>" (e.g. "ollama:gemma4:31b"). CLI --solvers overrides.
+    solvers: list[str] = ["openai", "anthropic"]
+
     # Max tokens for model responses
     max_tokens: int = 8000
     max_iterations: int = 5
