@@ -28,6 +28,17 @@ class Settings(BaseModel):
     # Examples: "gemma4:31b" (vision), "qwen3.5:35b-a3b", "deepseek-r1:32b".
     ollama_base_url: str = "http://localhost:11434"
     ollama_timeout: float = 1800.0  # 30 min — large local models can be slow
+    # Ollama output cap. 8k (the cloud default) truncates multi-answer JSON
+    # mid-stream on local models that echo question_text. 32k handles the
+    # long refinement outputs from verbose models (qwen3.x).
+    ollama_max_tokens: int = 32000
+    # Ollama input context window. Ollama's default is 4096 — far smaller than
+    # modern model capacities (262k for qwen3.x / gemma4) — which silently
+    # truncates prompts with references + many images. 65536 gives comfortable
+    # headroom for quiz + references + ~40 images + 32k output. KV cache for
+    # CPU-offloaded layers spills to system RAM (not VRAM), so the cost is
+    # slower inference rather than OOM. Each image encodes to ~256+ tokens.
+    ollama_num_ctx: int = 65536
 
     # Solver pair used for consensus. Each entry is either "openai", "anthropic",
     # or "ollama:<model>" (e.g. "ollama:gemma4:31b"). CLI --solvers overrides.

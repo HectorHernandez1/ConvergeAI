@@ -8,8 +8,8 @@ from utils.cache import get_cache_key, get_cached_response, cache_response
 from utils.image_types import ExtractedImage
 from .base_solver import BaseSolver
 
-# Known vision-capable Ollama model prefixes
-VISION_MODEL_PREFIXES = (
+# Fallback prefixes used only if /api/show is unreachable
+_VISION_PREFIX_FALLBACK = (
     "gemma3", "gemma4",
     "llava", "bakllava",
     "llama3.2-vision", "llama4",
@@ -19,9 +19,107 @@ VISION_MODEL_PREFIXES = (
 )
 
 
-def _model_supports_vision(model: str) -> bool:
-    name = model.lower()
-    return any(name.startswith(prefix) for prefix in VISION_MODEL_PREFIXES)
+def _repair_truncated_json(s: str) -> Optional[object]:
+    """Try to salvage JSON that got cut off mid-output by trimming to the last
+    complete element and closing open brackets/braces. Returns None if no fix
+    works."""
+    s = s.rstrip().rstrip(",")
+    # Walk the prefix tracking brace/bracket depth and string state, find the
+    # last position where we are outside any string and could close cleanly.
+    depth_stack = []
+    in_str = False
+    escape = False
+    last_complete = -1
+    for i, c in enumerate(s):
+        if escape:
+            escape = False
+            continue
+        if c == "\\" and in_str:
+            escape = True
+            continue
+        if c == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if c in "{[":
+            depth_stack.append(c)
+        elif c in "}]":
+            if depth_stack:
+                depth_stack.pop()
+            if not depth_stack:
+                last_complete = i
+    # If there's a complete top-level object, just use that.
+    if not depth_stack and last_complete >= 0:
+        try:
+            return json.loads(s[: last_complete + 1])
+        except json.JSONDecodeError:
+            pass
+    # Otherwise, trim back to the last comma at depth==1 (end of a complete
+    # answer entry) and close what remains.
+    depth = 0
+    in_str = False
+    escape = False
+    trim_at = -1
+    for i, c in enumerate(s):
+        if escape:
+            escape = False
+            continue
+        if c == "\\" and in_str:
+            escape = True
+            continue
+        if c == '"':
+            in_str = not in_str
+            continue
+        if in_str:
+            continue
+        if c in "{[":
+            depth += 1
+        elif c in "}]":
+            depth -= 1
+        elif c == "," and depth == 2:
+            trim_at = i
+    if trim_at > 0:
+        candidate = s[:trim_at]
+        # Close any still-open structures.
+        stack = []
+        in_str2 = False
+        esc2 = False
+        for c in candidate:
+            if esc2:
+                esc2 = False
+                continue
+            if c == "\\" and in_str2:
+                esc2 = True
+                continue
+            if c == '"':
+                in_str2 = not in_str2
+                continue
+            if in_str2:
+                continue
+            if c in "{[":
+                stack.append(c)
+            elif c in "}]":
+                if stack:
+                    stack.pop()
+        closers = "".join("}" if o == "{" else "]" for o in reversed(stack))
+        try:
+            return json.loads(candidate + closers)
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+def _probe_vision(base_url: str, model: str) -> Optional[bool]:
+    """Ask the Ollama server whether this model declares the 'vision' capability.
+    Returns None on network/parse failure so the caller can fall back."""
+    try:
+        resp = httpx.post(f"{base_url}/api/show", json={"model": model}, timeout=10.0)
+        resp.raise_for_status()
+        caps = resp.json().get("capabilities") or []
+        return "vision" in caps
+    except Exception:
+        return None
 
 
 class OllamaSolver(BaseSolver):
@@ -30,7 +128,13 @@ class OllamaSolver(BaseSolver):
         self.model = model
         self.short_name = short_name or f"Ollama-{model}"
         self.base_url = settings.ollama_base_url.rstrip("/")
-        self.supports_vision = _model_supports_vision(model)
+
+        probed = _probe_vision(self.base_url, model)
+        if probed is None:
+            name = model.lower()
+            self.supports_vision = any(name.startswith(p) for p in _VISION_PREFIX_FALLBACK)
+        else:
+            self.supports_vision = probed
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     async def solve(self, problem: str, references: str = None,
@@ -62,9 +166,14 @@ class OllamaSolver(BaseSolver):
             ],
             "stream": False,
             "format": "json",
+            # Disable thinking for thinking-capable models (qwen3.x, gemma4, etc).
+            # With thinking on, reasoning tokens consume num_predict and
+            # message.content can come back empty, breaking JSON parsing.
+            "think": False,
             "options": {
                 "temperature": 0.3 if iteration == 1 else 0.5,
-                "num_predict": settings.max_tokens,
+                "num_predict": settings.ollama_max_tokens,
+                "num_ctx": settings.ollama_num_ctx,
             },
         }
 
@@ -76,10 +185,11 @@ class OllamaSolver(BaseSolver):
         output_text = data["message"]["content"]
         input_tokens = data.get("prompt_eval_count", 0)
         output_tokens = data.get("eval_count", 0)
+        done_reason = data.get("done_reason")
         total_tokens = input_tokens + output_tokens
         cost = self.estimate_cost(input_tokens, output_tokens)
 
-        response_data = self._parse_response(output_text)
+        response_data = self._parse_response(output_text, done_reason=done_reason)
         normalized_answers = self._normalize_answers(response_data["answers"])
         solver_response = SolverResponse(
             model_name=self.model_name,
@@ -116,9 +226,16 @@ class OllamaSolver(BaseSolver):
                 disagreement_summary=previous_answers["disagreement_summary"],
             )
 
-    def _parse_response(self, output: str) -> dict:
+    def _parse_response(self, output: str, done_reason: Optional[str] = None) -> dict:
+        stripped = (output or "").strip()
+        if not stripped:
+            raise ValueError(
+                f"Ollama model {self.model} returned empty content "
+                f"(done_reason={done_reason}). This usually means thinking tokens "
+                "consumed num_predict — confirm 'think': false is set."
+            )
         try:
-            data = json.loads(output.strip())
+            data = json.loads(stripped)
             if isinstance(data, list):
                 return {"answers": data}
             if "answers" not in data:
@@ -134,4 +251,22 @@ class OllamaSolver(BaseSolver):
                         return {"answers": data}
                     if "answers" in data:
                         return data
-            raise ValueError("Invalid JSON response from Ollama model")
+
+            # Last-ditch: if the response was truncated mid-JSON (done_reason=length
+            # or closing tokens missing), try to repair by closing open braces/brackets.
+            # This salvages partial runs instead of wasting a 20-min iteration.
+            if done_reason == "length" or not stripped.rstrip().endswith(("}", "]")):
+                repaired = _repair_truncated_json(stripped)
+                if repaired is not None:
+                    if isinstance(repaired, list):
+                        return {"answers": repaired}
+                    if "answers" in repaired:
+                        return repaired
+
+            head = stripped[:200].replace("\n", " ")
+            tail = stripped[-200:].replace("\n", " ")
+            raise ValueError(
+                f"Invalid JSON response from Ollama model {self.model} "
+                f"(done_reason={done_reason}, length={len(stripped)}). "
+                f"Head: {head!r} ... Tail: {tail!r}"
+            )

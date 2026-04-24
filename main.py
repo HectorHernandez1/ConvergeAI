@@ -185,35 +185,89 @@ async def run_consensus(problem_path: str,
         total_cost_usd=total_cost
     )
 
-def _determine_consensus(model_responses: dict, comparison, name_a: str, name_b: str) -> list:
-    consensus = []
-    latest_a = model_responses[name_a][-1]
-    latest_b = model_responses[name_b][-1]
+_CONFIDENCE_WEIGHT = {"high": 3, "medium": 2, "low": 1}
 
-    answers_a = {a.question_number: a for a in latest_a.answers}
-    answers_b = {a.question_number: a for a in latest_b.answers}
+
+def _determine_consensus(model_responses: dict, comparison, name_a: str, name_b: str) -> list:
+    """Pick a final answer for each question.
+
+    For agreed questions: take the matching answer.
+
+    For disagreed questions we used to just take the latest answer from
+    whichever model had higher confidence. That pathology shows up hard on
+    local models that flip-flop between iterations — the "latest" answer is
+    often a fresh reversal, not a settled position.
+
+    The sticky rule: look across ALL iterations of BOTH models, group
+    semantically-equivalent answers together, and pick the one that was held
+    the most iteration-slots. Ties broken by confidence (weighted across
+    occurrences), then by preferring the latest iteration of solver A.
+    """
+    from utils.comparator import _check_match
+
+    consensus = []
+    histories = {
+        name_a: model_responses[name_a],
+        name_b: model_responses[name_b],
+    }
+    latest_a = {a.question_number: a for a in model_responses[name_a][-1].answers}
+    latest_b = {a.question_number: a for a in model_responses[name_b][-1].answers}
 
     for q_num in comparison.matching_questions:
-        consensus.append(answers_a.get(q_num) or answers_b.get(q_num))
+        consensus.append(latest_a.get(q_num) or latest_b.get(q_num))
 
     for diff in comparison.differing_questions:
         q_num = diff["question_number"]
-        answer_a = answers_a.get(q_num)
-        answer_b = answers_b.get(q_num)
-
-        if answer_a and answer_b:
-            if answer_a.confidence == "high" and answer_b.confidence != "high":
-                consensus.append(answer_a)
-            elif answer_b.confidence == "high" and answer_a.confidence != "high":
-                consensus.append(answer_b)
-            else:
-                consensus.append(answer_a)
-        elif answer_a:
-            consensus.append(answer_a)
-        elif answer_b:
-            consensus.append(answer_b)
+        pick = _pick_sticky_answer(q_num, histories, name_a, _check_match)
+        if pick is not None:
+            consensus.append(pick)
 
     return sorted([c for c in consensus if c is not None], key=lambda x: x.question_number)
+
+
+def _pick_sticky_answer(q_num: int, histories: dict, name_a: str, match_fn):
+    """For a disagreed question, find the answer held most consistently across
+    all iterations of both models. Group answers by semantic equivalence using
+    match_fn (exact/numerical/semantic)."""
+    # Collect every (model, iteration_index, Answer) tuple that addresses q_num
+    occurrences = []
+    for model_name, responses in histories.items():
+        for iter_idx, resp in enumerate(responses):
+            for ans in resp.answers:
+                if ans.question_number == q_num:
+                    occurrences.append((model_name, iter_idx, ans))
+                    break
+
+    if not occurrences:
+        return None
+
+    # Group semantically-equivalent answers into buckets
+    buckets = []  # list of dicts: {"rep": Answer, "members": [(model, iter, ans)]}
+    for occ in occurrences:
+        _, _, ans = occ
+        placed = False
+        for bucket in buckets:
+            if match_fn(ans.answer, bucket["rep"].answer):
+                bucket["members"].append(occ)
+                placed = True
+                break
+        if not placed:
+            buckets.append({"rep": ans, "members": [occ]})
+
+    # Score each bucket: persistence (count) + confidence (sum of weights)
+    def score(bucket):
+        count = len(bucket["members"])
+        conf_sum = sum(_CONFIDENCE_WEIGHT.get(m[2].confidence, 0) for m in bucket["members"])
+        latest_iter = max(m[1] for m in bucket["members"])
+        has_a_latest = any(m[0] == name_a and m[1] == latest_iter for m in bucket["members"])
+        return (count, conf_sum, latest_iter, 1 if has_a_latest else 0)
+
+    buckets.sort(key=score, reverse=True)
+    winner = buckets[0]
+
+    # Use the representative from the most recent occurrence of the winning bucket
+    latest_member = max(winner["members"], key=lambda m: m[1])
+    return latest_member[2]
 
 def save_output(output: FinalOutput, problem_path: str):
     output_dir = Path(settings.output_dir)
