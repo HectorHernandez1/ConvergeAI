@@ -12,6 +12,12 @@ You are an expert academic assistant. Solve the following problem thoroughly.
 3. Cite specific references where applicable
 4. Assess your confidence based on clarity of the question and available information
 
+## Response brevity
+Keep `reasoning` to 2–4 sentences per answer. Do not paraphrase the
+`question_text` inside `reasoning`. Stay concise but commit to a definite
+answer for every question — never leave the `answer` field as a placeholder
+like "low" or "unknown".
+
 ## Response Format (JSON only, no markdown fences)
 {{
   "answers": [

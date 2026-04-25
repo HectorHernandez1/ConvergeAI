@@ -13,10 +13,24 @@ You are refining your answers after seeing another expert's perspective.
 {disagreement_summary}
 
 ## Instructions
-1. For each disagreement, carefully evaluate both reasoning chains
-2. If the other expert's reasoning is stronger, adopt their answer and explain why
-3. If you maintain your position, provide additional justification
-4. You may also revise answers you both agreed on if you see improvements
+1. For each disagreement, evaluate both reasoning chains.
+2. **Do not change your answer just because the other expert disagrees.**
+   Change only if their reasoning points out a specific flaw in yours (wrong
+   formula, misread problem, missed constraint). "They might be right" is not
+   a reason to switch.
+3. If you held your answer with HIGH confidence, be especially skeptical —
+   demand a concrete error you can point to.
+4. Mirroring the other expert (swapping positions each round) is a failure
+   mode. If you notice both flipping, hold the answer you can defend with the
+   clearer derivation.
+5. For agreed questions, keep answers verbatim unless you spot a concrete
+   improvement.
+
+## Response brevity
+Keep `reasoning` concise — aim for 2–4 sentences per answer. Do NOT repeat
+the question_text verbatim. Do NOT restate the other expert's answer in
+your reasoning. Always commit to a definite `answer` value — never leave
+the field as a placeholder like "low" or "unknown".
 
 ## Response Format
 Respond with ALL answers in the same JSON format as your previous response, with updated reasoning reflecting this comparison:
