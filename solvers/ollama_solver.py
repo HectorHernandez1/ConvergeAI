@@ -171,7 +171,10 @@ class OllamaSolver(BaseSolver):
             # message.content can come back empty, breaking JSON parsing.
             "think": False,
             "options": {
-                "temperature": 0.3 if iteration == 1 else 0.5,
+                # Lower iter-1 temperature on Ollama. Local models (qwen3.x in
+                # particular) sometimes roll verbose outputs at 0.3 and
+                # truncate before finishing all answers; 0.1 keeps them terse.
+                "temperature": 0.1 if iteration == 1 else 0.5,
                 "num_predict": settings.ollama_max_tokens,
                 "num_ctx": settings.ollama_num_ctx,
             },
