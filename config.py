@@ -45,6 +45,8 @@ class Settings(BaseModel):
 
     # Solver pair used for consensus. Each entry is either "openai", "anthropic",
     # or "ollama:<model>" (e.g. "ollama:gemma4:31b"). CLI --solvers overrides.
+    # Default: cloud pair. Override for local with e.g.:
+    #   --solvers ollama:gemma4:31b,ollama:qwen3.6:35b
     solvers: list[str] = ["openai", "anthropic"]
 
     # Max tokens for model responses

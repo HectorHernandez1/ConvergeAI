@@ -46,11 +46,12 @@ ANTHROPIC_API_KEY=sk-ant-your-anthropic-api-key
 
 5. (Optional) Install [Ollama](https://ollama.com) and pull models for local inference:
 ```bash
-# Install from https://ollama.com/download, then:
+# Install from https://ollama.com/download, then pull the recommended local pair:
 ollama pull gemma4:31b
-ollama pull qwen3.5:35b-a3b
+ollama pull qwen3.6:35b
 ollama list        # confirm models are installed
 ```
+Both models are vision-capable and ~30-35B parameters — a balanced pair for academic quizzes with figures. See the **Running with local models** section below for the override flag.
 
 ## Usage
 
@@ -113,26 +114,47 @@ python main.py --problem input/quiz.pdf --no-cache
 
 ### Choosing the Solver Pair
 
-By default ConvergeAI runs `openai` ↔ `anthropic`. Use `--solvers` to change the pair. Each entry is one of:
+**Default**: `openai` ↔ `anthropic` (cloud, requires API keys). The project was built around this pairing and that's the supported, recommended flow.
+
+Use `--solvers` to override with any other pair. Each entry is one of:
 
 - `openai` — uses `settings.openai_model`
 - `anthropic` — uses `settings.anthropic_model`
-- `ollama:<model>` — any model visible in `ollama list` (model names may contain colons, e.g. `gemma4:31b`)
+- `ollama:<model>` — any model visible in `ollama list` (names may contain colons, e.g. `gemma4:31b`)
 
 ```bash
-# Cloud pair (default)
+# Default — cloud pair (no flag needed)
+python main.py --problem input/quiz.pdf
+
+# Same thing, explicit
 python main.py --solvers openai,anthropic
 
-# Two local open-source models — fully offline, zero API cost
-python main.py --solvers ollama:gemma4:31b,ollama:qwen3.5:35b-a3b
-
-# Mix cloud + local
+# Mix cloud + local — local model gets a "second opinion" from a cloud model
 python main.py --solvers openai,ollama:gemma4:31b
 ```
 
-**Vision handling:** image input is automatically sent to multimodal models (gemma3/4, llava, llama3.2-vision, minicpm-v, qwen*vl, moondream, pixtral) and silently skipped for text-only models. If your problem relies on visuals (charts, figures), pair at least one vision-capable model.
+### Running with local models (Ollama override)
 
-**Performance:** large local models (20B+ params) can take minutes per iteration on modest hardware. Default timeout is 30 min per request, configurable via `ollama_timeout` in `config.py`.
+If you'd rather skip the cloud bill (or run fully offline), override `--solvers` with two local Ollama specs. The recommended local pair is `gemma4:31b ↔ qwen3.6:35b`:
+
+```bash
+python main.py --solvers ollama:gemma4:31b,ollama:qwen3.6:35b
+```
+
+Why this pair:
+- Both vision-capable (auto-detected via `ollama show`)
+- Both 30–35B parameters — balanced consensus, similar inference speed
+- Both fit comfortably in a 32GB-VRAM GPU; KV cache for any spilled layers goes to system RAM
+- Empirically converges in 2–4 iterations on a 38-image quiz, no oscillation, **$0 cost**
+
+Other Ollama specs you can try via the same flag:
+- `ollama:qwen2.5vl:32b` — pure vision-language model, very stable, 21GB
+- `ollama:llama3.2-vision:11b` — smaller, faster sanity check
+- `ollama:gpt-oss:20b` — OpenAI's open-weight model
+
+**Vision handling**: images are automatically sent only to models that declare the `vision` capability via `ollama show` (and silently skipped otherwise). If your problem has visuals, pair at least one vision model.
+
+**Performance**: large local models (20B+) can take minutes per iteration. Default request timeout is 30 min, configurable via `ollama_timeout` in `config.py`.
 
 ## Configuration
 
